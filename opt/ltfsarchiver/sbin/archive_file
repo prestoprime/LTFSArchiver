@@ -1,0 +1,177 @@
+#!/bin/bash
+
+#  PrestoPRIME  LTFSArchiver
+#  Version: 1.0 Beta
+#  Authors: L. Savio, L. Boch, R. Borgotallo
+#
+#  Copyritght (C) 2011-2012 RAI – Radiotelevisione Italiana <cr_segreteria@rai.it>
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU Affero General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU Affero General Public License for more details.
+#
+# You should have received a copy of the GNU Affero General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+################ INPUT PARMS
+#	$1 = device su cui e' montato LTFS
+#	$2 = LABEL (per creare flocat)
+#	$3/@ = UUID
+#########################
+function json_MD5()
+{
+#	in MD5ARRAY ho i valori file / md5
+MD5_IDX=0
+LAST=0
+JsonOutput='{"exit_code":"200","output":['
+while [ $MD5_IDX -lt ${#MD5ARRAY[@]} ];do
+	let LAST+=2
+	if [ ${MD5ARRAY[$MD5_IDX+1]} == "none" ]; then
+		JsonOutput=$JsonOutput'{"FLocat":"'${MD5ARRAY[$MD5_IDX]}'"}'
+	else
+		JsonOutput=$JsonOutput'{"FLocat":"'${MD5ARRAY[$MD5_IDX]}'","MD5":"'${MD5ARRAY[$MD5_IDX+1]}'"}'
+	fi
+	[ $LAST -lt ${#MD5ARRAY[@]} ] && JsonOutput=$JsonOutput','
+	let MD5_IDX+=2
+done
+JsonOutput=$JsonOutput']}'
+}
+function exec_archive()
+{
+case ${UUID_DATA[1]} in
+	"D"|"d")
+		#	uso rsync e lo faccio in due giri.
+		main_logger 0 "Starting copy for uuid=$WORKING_UUID - rsync phase 1"
+		#	Nel primo includo i file di dimensioni inferiori al Mega (limite dei file in partizione index)
+		$RSYNC_CMD ${UUID_DATA[0]} $TARGETFS/$WORKING_UUID --max-size='1M'
+		STEP1_RC=$?
+		if [ $STEP1_RC == 0 ]; then
+			main_logger 1 "Rsync 1st step OK"
+			#	Nel secondo NON metto limitazioni, copiera' il resto
+			main_logger 0 "Starting copy for uuid=$WORKING_UUID - rsync phase 2"
+			$RSYNC_CMD ${UUID_DATA[0]} $TARGETFS/$WORKING_UUID
+			STEP2_RC=$?
+			if [ $STEP2_RC == 0 ]; then
+				main_logger 1 "Rsync 2nd step OK"
+				for archfile in `find $TARGETFS/$WORKING_UUID -type f -printf '%s %p\n' | sort -n | cut -d ' ' -f 2`; do
+					if [ ${UUID_DATA[3]} == 't' ]; then
+						main_logger 1 "creating md5 value for file: $archfile"
+						temp_md5=`md5sum -b $archfile | cut -d ' ' -f 1`
+					else
+						temp_md5="none"
+					fi
+					temp_file=`echo $archfile | sed -e 's;'$TARGETFS/$WORKING_UUID/\`basename ${UUID_DATA[0]}\`';'$FLOCAT';'`
+					MD5ARRAY=( "${MD5ARRAY[@]}" "$temp_file" "$temp_md5" )
+				done
+			else
+				main_logger 0 "Rsync 2nd step error: $STEP1_RC"
+			fi
+		else
+			main_logger 0 "Rsync 1st step error: $STEP1_RC"
+		fi	
+		COPY_RC=`echo "$STEP1_RC + $STEP2_RC" | bc`
+	;;
+	"F"|"f")
+		#	uso copy
+		main_logger 0 "Starting copy for uuid=$WORKING_UUID - copying file"
+		cp -p  ${UUID_DATA[0]}  $TARGETFS/$WORKING_UUID
+		STEP_RC=$?
+		if [ $STEP_RC == 0 ]; then
+			main_logger 1 "File copy OK"
+			if [ ${UUID_DATA[3]} == 't' ]; then
+				main_logger 1 "Creation of md5 checksum requested"
+				temp_md5=`md5sum -b $TARGETFS/$WORKING_UUID/\`basename ${UUID_DATA[0]}\` | cut -d ' ' -f 1`
+			else
+				temp_md5="none"
+			fi
+			MD5ARRAY=( "${MD5ARRAY[@]}" "$FLOCAT" "$temp_md5" )
+		else
+			main_logger 0 "File copy error: $STEP_RC"
+		fi
+		COPY_RC=$STEP_RC
+	;;
+esac
+}
+###############################
+CFG_FILE=`dirname $0`/../conf/ltfsarchiver.conf
+. $CFG_FILE
+. $LTFSARCHIVER_HOME/sbin/common.sh
+###############################
+PARMSN=$#
+PARMSS=( $@ )
+MAIN_LOG_FILE=${PARMSS[0]}
+UUID_I=1
+#	ARRAY CON LE UUID
+while [ $UUID_I -lt $PARMSN ]; do
+	LISTA_UUID=( "${LISTA_UUID[@]}" ${PARMSS[$UUID_I]} )
+	let UUID_I+=1
+done
+#	Leggo i dati comuni a tutte le uuid prendendoli dalla prima
+COMMON_PARMS=( `$DBACCESS" select ltotape, device from requests where uuid='${LISTA_UUID[0]}';" | tr -d ' ' | tr '|' ' ' ` )
+# Filesystem su cui e' montato LTO
+TARGETFS=/mnt/ltfs`basename ${COMMON_PARMS[1]}`
+# Freespace da scalare
+LTO_TYPE=( `$DBACCESS"select ltotype from lto_info where label='${COMMON_PARMS[0]}';" | tr -d ' ' | tr '|' ' ' `)
+LTOTIDX=0
+while [ $LTOTIDX -lt ${#LTO_ALLOWED_TYPES[@]} ]; do
+	if [ ${LTO_ALLOWED_TYPES[$LTOTIDX]} == $LTO_TYPE ]; then
+		FREE_WATERMARK=${LTO_WATERMARK[$LTOTIDX]}
+		LTOTIDX=${#LTO_ALLOWED_TYPES[@]}
+	fi
+	let LTOIDX+=1
+done
+#	CICLO....
+WORKING_IDX=0
+while [ $WORKING_IDX -lt ${#LISTA_UUID[@]} ]; do
+	#	Lettura parametri
+	WORKING_UUID=${LISTA_UUID[$WORKING_IDX]}
+	UUID_DATA=( `$DBACCESS"select sourcefile,datatype, sourcesize, md5create from requests where uuid='$WORKING_UUID'" | tr -d ' ' | tr '|' ' '` )
+	main_logger 4 "UUID_DATA: ${UUID_DATA[@]}"
+	#	Passo l'istanza in running e registro il FLOCAT
+	update_uuid_status $WORKING_UUID 50
+	FLOCAT="lto-ltfs:"${COMMON_PARMS[0]}":"$WORKING_UUID/`basename ${UUID_DATA[0]}`
+	#	Creazione della dir su LTO
+	mkdir $TARGETFS/$WORKING_UUID
+	if [ $? -gt 0 ]; then
+		START_COPY="N"
+		fallout_uuid $WORKING_UUID 106
+	else
+		START_COPY="Y"
+	fi
+	#	copia dati
+	COPY_RC=0
+	unset MD5ARRAY
+	if [ $START_COPY == "Y" ]; then
+		exec_archive
+		#	Com'e' andata?
+		main_logger 4 "COPY_RC returned: $COPY_RC"
+		if [ $COPY_RC == 0 ]; then
+			main_logger 0 "$WORKING_UUID archiving complete"
+			update_uuid_status $WORKING_UUID 60
+			json_MD5
+		else
+			JsonOutput='{"exit_code":"500"}'
+			main_logger 0 "$WORKING_UUID is now in fallout"
+			fallout_uuid $WORKING_UUID 107
+		fi
+		main_logger 4 "JsonOutput string:$JsonOutput"
+		#	Store delle stringhe jsonoutput e flocat
+		$DBACCESS"update requests set md5value='$JsonOutput',destfile='$FLOCAT' where uuid='$WORKING_UUID'"  >/dev/null 2>&1
+		#	Sottraggo da booked lo spazio preallocato
+		#	ed aggiorno lo spazio libero
+		NOW_FREE=`df -m $TARGETFS | grep $TARGETFS | awk '{print $4}'`
+		let NOW_FREE+=-$FREE_WATERMARK
+		$DBACCESS" update lto_info set free=$NOW_FREE,booked=booked-${UUID_DATA[2]} where label='${COMMON_PARMS[0]}'" >/dev/null 2>&1
+		let WORKING_IDX+=1
+	fi
+done
+#	smonto il FS
+umount $TARGETFS
+#	Aspetto LTFSARCHIVER_LTFSTIMEOUT secondi
+main_logger 1 "Waiting while LTFS updates index... $LTFSARCHIVER_LTFSTIMEOUT sec."
+sleep $LTFSARCHIVER_LTFSTIMEOUT

@@ -1,0 +1,151 @@
+#!/bin/bash
+#  PrestoPRIME  LTFSArchiver
+#  Version: 1.0 Beta
+#  Authors: L. Savio, L. Boch, R. Borgotallo
+#
+#  Copyritght (C) 2011-2012 RAI âadiotelevisione Italiana <cr_segreteria@rai.it>
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU Affero General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU Affero General Public License for more details.
+#
+# You should have received a copy of the GNU Affero General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#------------------------------------------------------------------------
+#	update-rc.d ltfsarchiver start 90 3 5 . stop 90 0 1 2 4 6 .
+#-------------------------------------------------------------------------
+#	
+###########################
+### BEGIN INIT INFO
+# Provides: ltfsarchiver
+# Required-Start: postgresql
+# Required-Stop:
+# Default-Start: 3 5
+# Default-Stop: 0 1 2 4 6
+# Short-Description: Start daemon at boot time
+# Description: Enable service provided by daemon.
+### END INIT INFO
+
+
+PROG="ltfsarchiver"
+PROG_PATH="/opt/ltfsarchiver/sbin"
+PID_PATH="/var/run"
+
+start() {
+if [ -e "$PID_PATH/$PROG.pid" ]; then
+	if [ -z `pidof -x $PROG_PATH/$PROG` ]; then
+		#	esiste pidfile, ma non esiste processo - oops
+		echo "[WARNING] $PROG not running, but pidfile (`cat $PID_PATH/$PROG.pid`) exixts"
+		RC=2
+	else
+		# esiste pidfile, esiste processo - ok: running
+		echo "[WARNING] $PROG (`cat $PID_PATH/$PROG.pid`) is already running"
+		RC=1
+	fi
+else
+	if [ -z `pidof -x $PROG_PATH/$PROG` ]; then
+		#	non esiste pidfile, non esiste processo - ok, avvio
+		$PROG_PATH/$PROG $PROG_ARGS 2>&1 >/dev/null &
+		echo "$PROG started"
+		echo `pidof -x $PROG_PATH/$PROG` > "$PID_PATH/$PROG.pid"
+		RC=0
+	else
+		# non esiste pidfile, esiste processo - oops
+		echo "[WARNING] $PROG (`pidof -x $PROG_PATH/$PROG`) is running, but pidfile is missing"
+		RC=2
+	fi
+fi
+}
+
+
+status() {
+if [ -e "$PID_PATH/$PROG.pid" ]; then
+	if [ -z `pidof -x $PROG_PATH/$PROG` ]; then
+		# esiste pidfile, ma non preocesso - oops
+		echo "[WARNING] $PROG not running, but pidfile (`cat $PID_PATH/$PROG.pid`) exixts"
+		RC=2
+	else
+		# esiste pidfile, esiste preocesso - ok: running
+		echo "$PROG is running"
+		RC=0
+	fi
+else
+	if [ -z `pidof -x $PROG_PATH/$PROG` ]; then
+		# non esiste pidfile, non esiste processo - ok: stopped
+		echo "$PROG is stopped"
+		RC=3
+	else
+		# non esiste pidfile, ma esiste processo - oops
+		echo "[WARNING] $PROG (`pidof -x $PROG_PATH/$PROG`) is running, but pidfile is missing"
+		RC=2
+	fi
+fi
+		
+}
+stop() {
+if [ -e "$PID_PATH/$PROG.pid" ]; then
+	if [ -z `pidof -x $PROG_PATH/$PROG` ]; then
+		# esiste pidfile, ma non preocesso - rimuovo pid
+		echo "[WARNING] $PROG not running, but pidfile exixts... removing"
+		rm -f $PID_PATH/$PROG.pid
+		RC=2
+	else
+		# esiste pidfile, esiste processo... sono gli stessi?
+		if [ `cat $PID_PATH/$PROG.pid` == `pidof -x $PROG_PATH/$PROG` ]; then
+			kill `cat $PID_PATH/$PROG.pid`
+			rm -f $PID_PATH/$PROG.pid
+			echo "$PROG stopped..."
+			RC=0
+		else
+			echo "[WARNING] Running process pid (`pidof -x $PROG_PATH/$PROG`) didn't match pidfile (`cat $PID_PATH/$PROG.pid`)"
+			RC=1
+		fi
+	fi
+else
+	if [ -z `pidof -x $PROG_PATH/$PROG` ]; then
+		# non esiste pidfile, non esiste processo - ok: stopped
+		echo "$PROG already stopped"
+		RC=0
+	else
+		# non esiste pidfile, ma esiste processo - oops
+		echo "$PROG is running (`pidof -x $PROG_PATH/$PROG`), but pidfile is missing"
+		RC=1
+	fi
+fi
+}
+
+
+if [ "$(id -u)" != "0" -a "$1" != "status" ]; then
+    echo "This script must be run as root" 1>&2
+    exit 1
+fi
+
+case "$1" in
+    start)
+        start
+        exit $RC
+    ;;
+    stop)
+        stop
+        exit $RC
+    ;;
+    status)
+        status
+        exit $RC
+    ;;
+    restart)
+        stop
+	( [ $RC == 0 ] || [ $RC == 2 ] ) &&  start
+        exit $RC
+    ;;
+    **)
+        echo "Usage: $0 {start|stop|restart}" 1>&2
+        exit 1
+    ;;
+esac

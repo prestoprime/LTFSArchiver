@@ -1,0 +1,128 @@
+#!/bin/bash
+
+#  PrestoPRIME  LTFSArchiver
+#  Version: 1.0 Beta
+#  Authors: L. Savio, L. Boch, R. Borgotallo
+#
+#  Copyritght (C) 2011-2012 RAI – Radiotelevisione Italiana <cr_segreteria@rai.it>
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU Affero General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU Affero General Public License for more details.
+#
+# You should have received a copy of the GNU Affero General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
+. $CFGFILE
+. `dirname $0`/common.sh
+
+function insert_makeaval()
+{
+callingtime=`date '+%Y-%m-%d %H:%M:%S'`
+$DBACCESS "INSERT INTO requests ( uuid,status,substatus,manager,operation,ltotape,sourcefile,sourcesize,callingtime, poolname, datatype) \
+	VALUES ( '$taskid','wait',0,'$LTFSARCHIVER_MODE','A','$ltolabel','none',0,'$callingtime','','')" > /dev/null 2>&1
+RC=$?
+}
+
+
+function insert_unmakeaval()
+{
+callingtime=`date '+%Y-%m-%d %H:%M:%S'`
+$DBACCESS "INSERT INTO requests ( uuid,status,substatus,manager,operation,ltotape,sourcesize,callingtime, poolname, datatype,sourcefile) \
+	VALUES ( '$taskid','wait',0,'$LTFSARCHIVER_MODE','U','$ltolabel',0,'$callingtime','','','none')" > /dev/null 2>&1
+RC=$?
+}
+
+
+# Script starts here
+PARM=$QUERY_STRING
+command=$( get_parameter Command )
+case $command in
+	#	GETSTATUS / GETRESULT
+	"GetStatus"|"GetResult")
+		#       devo leggere il taskid
+		taskid=$( get_parameter TaskID )
+		getinfo_common
+	;;
+	#	WRITEFILE
+	"Mount")
+		#	deve darmi la label
+		ltolabel=$( get_parameter TapeID )
+		#ltolabel=`echo $urn | cut -d ':' -f 2`
+		if [ -z $ltolabel ]; then
+			message="400\tEmpty TapeID supplied"
+		else
+			#	fa parte di qualche pool?
+			gianelpool=`$DBACCESS" select count (*) from lto_info where label='$ltolabel';" | sed -e 's/^ *//'`
+			if [ $gianelpool -gt 0 ]; then
+				#       Inserisco record di richiesta lto_pool
+				taskid=`uuidgen`
+				insert_makeaval
+				if [ $RC == 0 ]; then
+					#	restituisco dati
+					message="200\t$taskid"
+				else
+					message="500\tFailed"
+				fi
+			else
+				message="400\tLTO with label: $ltolabel does not exists"
+				result="false"
+			
+			fi
+		fi
+	;;
+	"Unmount")
+		#       devo leggere la label
+		ltolabel=$( get_parameter TapeID )
+		if [ -z $ltolabel ]; then
+			message="400\tEmpty TapeID supplied"
+		else
+			eavailable=( `$DBACCESS "SELECT inuse FROM lto_info WHERE label='$ltolabel';" | head -1 | tr -d ' ' | tr '|' ' '` )
+			if [ "$eavailable" == "A" ]; then
+				taskid=`uuidgen`
+				insert_unmakeaval
+				RC=$?
+				if [ $RC == 0 ]; then
+					#	restituisco dati
+					message="200\t$taskid"
+				else
+					message="500\tFailed"
+				fi
+			else
+				message="400\t$ltolabel is not a made available tape at time"
+			fi
+		fi
+	;;
+	"Cancel")
+		#       devo leggere il taskid
+		taskid=$( get_parameter TaskID )
+		if [ -z $taskid ]; then
+			message="400\tInvalid or empty TaskID"
+		else
+			cancel_common "('A')"
+		fi
+;;
+
+	"Resubmit")
+		#       devo leggere il taskid
+		taskid=$( get_parameter TaskID )
+		if [ -z $taskid ]; then
+			message="400\tInvalid or empty TaskID"
+		else
+			#	====================================
+			#	Query DB, update
+			requeue_common "('A')"
+		fi
+	;;
+	#	ALTRO
+	*)
+		message="400\tInvalid command"
+	;;
+esac
+output_text_common

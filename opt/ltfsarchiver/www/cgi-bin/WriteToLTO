@@ -1,0 +1,174 @@
+#!/bin/bash
+
+#  PrestoPRIME  LTFSArchiver
+#  Version: 1.0 Beta
+#  Authors: L. Savio, L. Boch, R. Borgotallo
+#
+#  Copyritght (C) 2011-2012 RAI – Radiotelevisione Italiana <cr_segreteria@rai.it>
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU Affero General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU Affero General Public License for more details.
+#
+# You should have received a copy of the GNU Affero General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
+. $CFGFILE
+. `dirname $0`/common.sh
+
+function insert_write()
+{
+callingtime=`date '+%Y-%m-%d %H:%M:%S'`
+$DBACCESS "INSERT INTO requests ( uuid,status,substatus,manager,operation,sourcefile,sourcesize,callingtime, poolname, datatype, md5create) \
+	VALUES ( '$taskid','wait',0,'$LTFSARCHIVER_MODE','W','$filesrc',$mbsize,'$callingtime','$poolname','$itemtype','$createmd5')" > /dev/null 2>&1
+RC=$?
+}
+
+
+function getresult_local()
+{
+response=( `$DBACCESS "SELECT substatus,destfile,md5value FROM requests WHERE uuid = '$taskid';" | head -1| tr -d ' ' | tr '|' ' '` )
+if [ -z "$response" ]; then
+	[ $outformat == "JSON" ] && message='{"exit_code":"400","message":"uuid '$taskid' does not exist"}'
+	[ $outformat == "TEXT" ] && message="400\t$taskid does not exist"
+else
+	case ${response[0]} in
+		99)
+			[ $outformat == "JSON" ] && message='{"exit_code":"500","message":"failure"}'
+			[ $outformat == "TEXT" ] && message="500\tFailure"
+		;;
+		60)
+			[ $outformat == "JSON" ] && message=${response[2]}
+			[ $outformat == "TEXT" ] && message="200\tSuccess\t${response[1]} "		
+		;;
+		*)
+			[ $outformat == "JSON" ] && message='{"exit_code":"400","message":"Not completed"}'
+			[ $outformat == "TEXT" ] && message="400\tNot completed"
+		;;
+	esac
+fi
+}
+
+
+
+# Script starts here
+PARM=$QUERY_STRING
+command=$( get_parameter Command )
+#	Codici di substato per insert e resubmit
+case $command in
+	#	GETRESULT
+	"GetResult")
+		#	formato di output
+		outformat=$( get_parameter Output)
+		[ "$outformat" != "JSON" ] && outformat="TEXT"
+		#       devo leggere il taskid
+		taskid=$( get_parameter TaskID )
+		if [ -z $taskid ]; then
+			[ $outformat == "JSON" ] && message='{"exit_code":"400","message":"Empty ID"} '
+			[ $outformat == "TEXT" ] && message="400\tEmpty ID"
+		else
+			#	====================================
+			#	Query DB, leggo info
+			getresult_local
+		fi
+		[ $outformat == "JSON" ] && output_json_common
+		[ $outformat == "TEXT" ] && output_text_common
+	;;
+	#	GETSTATUS
+	"GetStatus")
+		#       devo leggere il taskid
+		taskid=$( get_parameter TaskID )
+		if [ -z $taskid ]; then
+			#message="Empty TaskID supplied"
+			message="400\tEmpty ID"
+		else
+			#	====================================
+			#	Query DB, leggo info
+			getinfo_common
+		fi
+		output_text_common
+	;;
+	#	WRITEFILE
+	"WriteFile"|"WriteFolder")
+		#	Pool fornito o default?
+		poolname=$( get_parameter PoolName )
+		createmd5='false'
+		askedmd5=$( get_parameter MD5 )
+		[ -z $poolname ] && poolname="default"
+		#	Esiste il pool specificato?
+		esiste=`$DBACCESS "SELECT count (*) FROM lto_info WHERE poolname = '$poolname';" | sed -e 's/^\ //' -e 's/\ $//' | head -1`
+		if [ $esiste -gt 0 ]; then
+			#       devo leggere il nome del file da archiviare
+			filesrc=$( get_parameter FileName )
+			if [ -z $filesrc ]; then
+				message="400\tEmpty FileName supplied"
+			else
+				#	Esiste? e quanto e' grande?
+				if ( [ -f $filesrc ] || [ -d $filesrc ] ); then
+					mbsize=`du -ksm $filesrc | awk '{ print $1 }'` 
+					taskid=`uuidgen`
+					[ -f $filesrc ] && itemtype="F"
+					[ -d $filesrc ] && itemtype="D"
+					#	se directory elimino eventuale "/" in coda
+					[ -d $filesrc ] && filesrc=`echo $filesrc | sed -e 's;\/$;;'`
+					[ "$askedmd5" == "Y" ] && createmd5='true'
+					#	Insert DB
+					insert_write
+					if [ $RC == 0 ]; then
+						#	restituisco dati
+						message="200\t$taskid"
+						#	se WriteFile ma oggetto e' dir, warning
+						if ( [ -d $filesrc ] && [ $command == "WriteFile" ] ); then
+							message=$message"\tWarning:folder"
+						fi
+						if ( [ -f $filesrc ] && [ $command == "WriteFolder" ] ); then
+							message=$message"\tWarning:file"
+						fi
+						
+					else
+						message="500\tFailed"
+					fi
+				else
+					message="400\t$filesrc"
+				fi
+			fi
+		else
+			message="400\tInvalid PoolName supplied"
+		fi
+		output_text_common
+	;;
+	"Cancel")
+		#       devo leggere il taskid
+		taskid=$( get_parameter TaskID )
+		if [ -z $taskid ]; then
+			message="400\tInvalid or empty ID"
+		else
+			cancel_common "('W')"
+		fi
+		output_text_common
+	;;
+	"Resubmit")
+		#       devo leggere il taskid
+		taskid=$( get_parameter TaskID )
+		if [ -z $taskid ]; then
+			#message="Empty TaskID supplied"
+			message="400\tInvalid or empty ID"
+		else
+			#	====================================
+			#	Query DB, update
+			requeue_common "('W')"
+		fi
+		output_text_common
+	;;
+	#	ALTRO
+	*)
+		message="400\tInvalid command"
+		output_text_common
+	;;
+esac

@@ -1,0 +1,118 @@
+#!/bin/bash
+
+#  PrestoPRIME  LTFSArchiver
+#  Version: 1.0 Beta
+#  Authors: L. Savio, L. Boch, R. Borgotallo
+#
+#  Copyritght (C) 2011-2012 RAI – Radiotelevisione Italiana <cr_segreteria@rai.it>
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU Affero General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU Affero General Public License for more details.
+#
+# You should have received a copy of the GNU Affero General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+############################################################################################
+#	sample:  ./restore_file /dev/st0 000003L5 c56ad884-50d2-4135-b5a2-dd8123d04560
+#       $1 = device su cui e' montato LTFS
+#	$2 = label
+#       $3/@ = UUID
+#########################
+CFG_FILE=`dirname $0`/../conf/ltfsarchiver.conf
+. $CFG_FILE
+. $LTFSARCHIVER_HOME/sbin/common.sh
+###############################
+PARMSN=$#
+PARMSS=( $@ )
+MAIN_LOG_FILE=${PARMSS[0]}
+UUID_I=1
+#       ARRAY CON LE UUID
+while [ $UUID_I -lt $PARMSN ]; do
+	LISTA_UUID=( "${LISTA_UUID[@]}" ${PARMSS[$UUID_I]} )
+	let UUID_I+=1
+done
+#       Leggo i dati comuni a tutte le uuid prendendoli dalla prima
+COMMON_PARMS=( `$DBACCESS" select ltotape, device from requests where uuid='${LISTA_UUID[0]}';" | tr -d ' ' | tr '|' ' ' ` )
+SOURCEFS=/mnt/ltfs`basename ${COMMON_PARMS[1]}`
+
+#       CICLO....
+WORKING_IDX=0
+while [ $WORKING_IDX -lt ${#LISTA_UUID[@]} ]; do
+	#       Lettura parametri
+	WORKING_UUID=${LISTA_UUID[$WORKING_IDX]}
+	UUID_DATA=( `$DBACCESS"select sourcefile,destfile from requests where uuid='$WORKING_UUID'" | tr -d ' ' | tr '|' ' '` )
+	main_logger 4 "UUID_DATA: ${UUID_DATA[@]}"
+	#	Controllo esistenza e tipologia oggetto sorgente
+	SPATH=$SOURCEFS/`echo  ${UUID_DATA[0]} | sed -e 's/.*\://'`
+	#	Esiste il file/path sorgente?
+	if [ -d $SPATH ] || [ -f $SPATH ]; then
+		[ -d $SPATH ] && itemtype="d"
+		[ -f $SPATH ] && itemtype="f"
+		#	C'e' abbastanza spazio per il restore?
+		NEEDEDSPACE=`du -ksm $SPATH | awk '{ print $1 }'`
+		FREESPACE=`df -P -m \`dirname ${UUID_DATA[1]}\` | tail -1 | awk '{ print $3 }'`
+		if [ $FREESPACE -ge $NEEDEDSPACE ]; then
+			#	Passo in running
+			update_uuid_status $WORKING_UUID 50
+			#	il source e' una dir o un file?
+			case $itemtype in
+				"f")	#	File: uso cp
+					main_logger 0 "Starting restore (copy)..."
+					cp -p $SPATH ${UUID_DATA[1]}
+					RRC=$?
+					if [ $RRC == 0 ]; then
+						main_logger 1 "File copy OK"
+					else
+						main_logger 0 "File copy error: $RRC"
+					fi
+					COPY_RC=$RRC
+					sleep 10
+				;;
+				"d")	#	File: uso rsync
+					main_logger 0 "Starting restore (rsync)..."
+					$RSYNC_CMD $SPATH/ ${UUID_DATA[1]} --max-size='1M'
+					STEP1_RC=$?
+					if [ $STEP1_RC == 0 ]; then
+						main_logger 1 "Rsync 1st step OK"
+						$RSYNC_CMD $SPATH/ ${UUID_DATA[1]}
+						STEP2_RC=$?
+						if [ $STEP1_RC == 0 ]; then
+							main_logger 1 "Rsync 1st step OK"
+						else
+							main_logger 0 "Rsync 2nd step error: $STEP1_RC"
+						fi
+					else
+						main_logger 0 "Rsync 1st step error: $STEP1_RC"
+					fi
+					COPY_RC=`echo "$STEP1_RC + $STEP2_RC" | bc`
+				;;
+			esac
+
+			#       Com'e' andata?
+			if [ $COPY_RC == 0 ]; then
+				main_logger 0 "$WORKING_UUID restore complete"
+				update_uuid_status $WORKING_UUID 60
+			else
+				main_logger 0 "$WORKING_UUID is now in fallout"
+				fallout_uuid $WORKING_UUID 206
+			fi
+		else
+			#	vado in fallout
+			main_logger 0 "Needed space for restore: $NEEDEDSPACE MB - Free space found: $FREESPACE: $WORKING_UUID is now in fallout"
+			fallout_uuid  $WORKING_UUID 205
+		fi
+	else
+		#	vado in fallout
+		main_logger 0 "flocat: $SPATH was not found: $WORKING_UUID is now in fallout"
+		fallout_uuid  $WORKING_UUID 204
+	fi
+	let WORKING_IDX+=1
+done
+#       smonto il FS
+umount $SOURCEFS
