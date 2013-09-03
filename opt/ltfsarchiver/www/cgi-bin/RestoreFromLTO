@@ -26,15 +26,15 @@ function insert_restore()
 {
 callingtime=`date '+%Y-%m-%d %H:%M:%S'`
 
-$DBACCESS "INSERT INTO requests ( uuid,status,substatus,manager,operation,sourcefile,destfile,callingtime,ltotape ) \
-	VALUES ( '$taskid','wait',0,'$LTFSARCHIVER_MODE','R','$filesrc','$filedest','$callingtime','`echo $filesrc | cut -d ":" -f 2`' )" > /tmp/badsql 2>&1
+$CMD_DB "INSERT INTO requests ( uuid,status,substatus,manager,operation,sourcefile,destfile,callingtime,ltotape ) \
+	VALUES ( '$taskid','wait',0,'$LTFSARCHIVER_MODE','R','$filesrc','$filedest','$callingtime','`echo \"$filesrc\" | cut -d ":" -f 2`' )" > /dev/null 2>&1
 RC=$?
 }
 
 # Script starts here
 PARM=$QUERY_STRING
 command=$( get_parameter Command )
-
+guicall=$( get_parameter FromGUI )
 case $command in
 	#       GETRESULT/GETSTATUS
 	"GetResult"|"GetStatus")
@@ -55,22 +55,22 @@ case $command in
 		#	devo leggere il path su cui restorare
 		filedest=$( get_parameter DestPath )
 		#       devo fornire il taskid
-		if ( [ -z $filesrc ] || [ -z $filedest ] ); then
+		if ( [ -z "$filesrc" ] || [ -z "$filedest" ] ); then
 			message="400\t"
-			[ -z $filesrc ] && message=$message"Empty FileName supplied; "
-			[ -z $filedest ] && message=$message"Empty DestPath supplied; "
+			[ -z "$filesrc" ] && message=$message"Empty FileName supplied; "
+			[ -z "$filedest" ] && message=$message"Empty DestPath supplied; "
 		else
 			#	c'e' un LTO con quella label?
-			FOUND=`$DBACCESS "SELECT count(*) FROM lto_info WHERE label = '\`echo $filesrc | cut -d ":" -f 2\`';" | head -1`
+			FOUND=`$CMD_DB "SELECT count(*) FROM lto_info WHERE label = '\`echo "$filesrc" | cut -d ":" -f 2\`';" | head -1`
 			if [ $FOUND == 0 ]; then
 				message="400\tInvalid Flocat"
 			else
 				#	la directory di arrivo deve esistere 
-				basedest=`dirname $filedest | sed -e 's/.*\://'`
+				basedest=`dirname "$filedest" | sed -e 's/.*\://'`
 				if [ -d $basedest ]; then
 					#	ma non deve esistere l'oggetto destinatario
-					if ( [ -d $filedest ] || [ -e $filedest ] || [ -f $filedest ] ); then
-						message="400\tDestination path $filedest exists"
+					if ( [ -d "$filedest" ] || [ -e "$filedest" ] || [ -f "$filedest" ] ); then
+						message="400\tDestination path \"$filedest\" exists"
 					else
 						taskid=`uuidgen`
 						#	====================================
@@ -85,7 +85,7 @@ case $command in
 						fi
 					fi
 				else
-					message="400\tDestination upper level path $basedest doesn't exist"
+					message="400\tDestination upper level path \"$basedest\" doesn't exist"
 				fi
 			fi
 		fi

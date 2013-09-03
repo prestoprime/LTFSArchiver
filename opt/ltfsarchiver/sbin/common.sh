@@ -24,24 +24,20 @@
 #	Se chiamata da tape_agent no
 function devices_config()
 {
-[ $1 == 1 ] && main_logger 3 "------------------------------------->>>    STEP 1 - CONFIGURATION"
+[ $1 == 1 ] && main_logger 3 "------------------------------------->>>    STEP 0 - CONFIGURATION"
 [ $1 == 1 ] && main_logger 4 "========== Listing available tape devices ======================="
 case $LTFSARCHIVER_MODE in
 	"C"|"B")
-		[ $1 == 1 ] && main_logger 3 "Found ${#CHANGER_DEVICES[@]} librarie(s):  ${CHANGER_DEVICES[@]}"
-		ccounter=0
-		while [ $ccounter -lt ${#CHANGER_DEVICES[@]} ]; do
+		[ $1 == 1 ] && main_logger 3 "Found ${#CONF_CHANGER_DEVICES[@]} librarie(s):  ${CONF_CHANGER_DEVICES[@]}"
+		for ((ccounter=0; ccounter<${#CONF_CHANGER_DEVICES[@]}; ccounter++)); do
 			[ $1 == 1 ] && main_logger 4 "-----------------------------------------------------------------"
-			[ $1 == 1 ] && main_logger 4 "Library $ccounter: ${CHANGER_DEVICES[$ccounter]}"
-			tape_array_name="CHANGER_TAPE_DEV_"$ccounter"[@]"
+			[ $1 == 1 ] && main_logger 4 "Library $ccounter: ${CONF_CHANGER_DEVICES[$ccounter]}"
+			tape_array_name="CONF_CHANGER_TAPEDEV_"$ccounter"[@]"
 			temp_array=( ${!tape_array_name} )
 			[ $1 == 1 ] && main_logger 3 "Library has ${#temp_array[@]} tape device(s):  ${temp_array[@]}"
-			tcounter=0
-			while [ $tcounter -lt ${#temp_array[@]} ]; do
-				ARRAY_MAP=("${ARRAY_MAP[@]}" ${temp_array[$tcounter]} ${CHANGER_DEVICES[$ccounter]} $tcounter)
-				let tcounter+=1
+			for ((tcounter=0; tcounter< ${#temp_array[@]}; tcounter++)); do
+				ARRAY_MAP=("${ARRAY_MAP[@]}" ${temp_array[$tcounter]} ${CONF_CHANGER_DEVICES[$ccounter]} $tcounter)
 			done
-			let ccounter+=1
 			LIBRARY_TAPES=( "${LIBRARY_TAPES[@]}" ${temp_array[@]} )
 		done
 		[ $1 == 1 ] && main_logger 4 "-----------------------------------------------------------------"
@@ -55,7 +51,7 @@ case $LTFSARCHIVER_MODE in
 	"M"|"B")
 		[ $1 == 1 ] && main_logger 3 "Listing available manual tape devices"
 		[ $1 == 1 ] && main_logger 4 "-----------------------------------------------------------------"
-		[ $1 == 1 ] && main_logger 3 "External tape device(s): ${MANUAL_TAPE_DEVICES[@]}"
+		[ $1 == 1 ] && main_logger 3 "External tape device(s): ${CONF_MANUAL_TAPEDEV[@]}"
 	;;
 esac
 [ $1 == 1 ] && main_logger 3 "================================================================="
@@ -102,12 +98,11 @@ esac
 function convert_dev_to_dte()
 {
 dteidx=0
-while [ $dteidx -lt ${#ARRAY_MAP[@]} ]; do
+for ((dteidx=0;dteidx<${#ARRAY_MAP[@]}; dteidx+=3)); do
 	if [ ${ARRAY_MAP[$dteidx]} == $1 ]; then
 		DTE_SLOT=${ARRAY_MAP[$dteidx+2]}
 		dteidx=${#ARRAY_MAP[@]}
 	fi
-	let dteidx+=3
 done
 }
 
@@ -130,8 +125,14 @@ MOUNTGID=`id -g $LTFSARCHIVER_USER`
 TEMPLOG="/tmp/`basename $1`.tmp"
 #       Se non esiste lo creo
 [ -d $4 ] || mkdir $4
+#	RIcerca backend
+for ((BIDX=0;BIDX<${#CONF_BACKENDS[@]};BIDX+=2)); do
+	if [ ${CONF_BACKENDS[$BIDX]} == $1 ]; then
+		TAPE_BACKEND=${CONF_BACKENDS[$BIDX+1]}
+	fi
+done
 #	Eseguo mount
-$LTFS_CMD -o devname=$1 -o $3 -o sync_type=$LTFSARCHIVER_LTFSSYNC -o uid=$MOUNTUID -o gid=$MOUNTGID  $4 2> $TEMPLOG
+$CMD_LTFS -o devname=$1 -o $3 -o sync_type=$LTFSARCHIVER_LTFSSYNC  -o tape_backend=$TAPE_BACKEND -o uid=$MOUNTUID -o gid=$MOUNTGID  $4 2> $TEMPLOG
 LTFSRC=$?
 if [ $LTFSRC == 0 ]; then
 	#	Se ho richiesto mount in rw devo verificare che non sia stato forzato ro per "troppopieno"
@@ -142,7 +143,7 @@ if [ $LTFSRC == 0 ]; then
 			main_logger 2 "`grep 'LTFS20022I' $TEMPLOG`"
 			#	forzo a zero il freespace
 			main_logger 0 "Tape $2 has reached its max capabilty... marking it as full"
-			$DBACCESS" update lto_info set free=0,booked=0 where label='$2';" >/dev/null 2>&1
+			$CMD_DB" update lto_info set free=0,booked=0 where label='$2';" >/dev/null 2>&1
 			LTFS_RC=4
 			umount $4
 		else
@@ -174,7 +175,7 @@ else
 	#	loggo il fail
 	main_logger 0 "Tape $2 has some FS problemi:... marking it as unusable"
 	#	forzo a zero il free space (label=$2) per non usarlo in futuro
-	$DBACCESS" update lto_info set free=0,booked=0 where label='$2';" >/dev/null 2>&1
+	$CMD_DB" update lto_info set free=0,booked=0 where label='$2';" >/dev/null 2>&1
 fi
 [ -f $TEMPLOG ] && rm -f $TEMPLOG
 }
@@ -182,21 +183,52 @@ fi
 function fallout_uuid ()
 {
 utime=`date '+%Y-%m-%d %H:%M:%S'`
+#	il substatus di fallout e' solitamente 99
+#	Ma se vado in fallout PRIMA della prenotazione dello spazio, lo passo a 9, in modo da poterlo cancellare
+FALLOUTSTATUS=99
+FALLOUTSTRING="fallout"
 case $2 in
-	01)
+	101)
 		Description="Requested pool has not enough available space"
+		FALLOUTSTATUS=9
 	;;
 	102)
 		Description="No tape with enough free space found into requested pool"
+		FALLOUTSTATUS=9
 	;;
 	103)
 		Description="No tape with enough free space found into library, drop to external not allowed"
+		FALLOUTSTATUS=9
+	;;
+	104)
+		Description="Source file not found"
+	;;
+	105)
+		Description="Source folder not found"
 	;;
 	106)
 		Description="Error while creating ltfs directory"
 	;;
 	107)
 		Description="Error while writing file to ltfs"
+	;;
+	108)
+		Description="Item to archive vanished before dispatching"
+		FALLOUTSTATUS=9
+	;;
+	109)
+		Description="Mismatch found between checksum file and file system (number of file(s) differs)"
+		FALLOUTSTATUS=19
+		FALLOUTSTRING="bad_request"
+	;;
+	110)
+		Description="Mismatch found between checksum file and file system (filename(s) differs)"
+		FALLOUTSTATUS=19
+		FALLOUTSTRING="bad_request"
+	;;
+	111)
+		Description="Some file didn not pass checksum verification"
+		FALLOUTSTATUS=19
 	;;
 	201)
 		Description="Tape not found in library"
@@ -229,7 +261,7 @@ case $2 in
 		Description="Error while formatting LTO"
 	;;
 	502)
-		Description="Error while mounting ltfs in rw mode"
+		Description="Error while mounting ltfs"
 	;;
 	601)
 		Description="Internal label not matching with requested LTO"
@@ -241,40 +273,33 @@ case $2 in
 		Description="Error unknown: $2"
 	;;
 esac
-$DBACCESS" update requests set status='fallout', substatus=99, endtime='$utime', errorcode=$2, errordescription='$Description' where uuid='$1';" >/dev/null 2>&1
+$CMD_DB" update requests set status='"$FALLOUTSTRING"', substatus=$FALLOUTSTATUS, endtime='$utime', errorcode=$2, errordescription='$Description' where uuid='$1';" >/dev/null 2>&1
 }
 function update_uuid_status ()
 {
 utime=`date '+%Y-%m-%d %H:%M:%S'`
 case $2 in
+	4|6)
+		$CMD_DB" update requests set substatus=$2 where uuid='$1';" >/dev/null 2>&1
+	;;
 	10)
-		$DBACCESS" update requests set substatus=10, manager='$3', ltolibrary='$4' where uuid='$1';" >/dev/null 2>&1
+		$CMD_DB" update requests set substatus=10, manager='$3', ltolibrary='$4' where uuid='$1';" >/dev/null 2>&1
 	;;
 	20)
-		$DBACCESS" update requests set substatus=20, device='$3' where uuid='$1';" >/dev/null 2>&1
+		$CMD_DB" update requests set substatus=20, device='$3' where uuid='$1';" >/dev/null 2>&1
 	;;
-	30)
-		$DBACCESS" update requests set substatus=30, status='starting' where uuid='$1';" >/dev/null 2>&1
-	;;
-	40)
-		$DBACCESS" update requests set substatus=40, status='starting' where uuid='$1';" >/dev/null 2>&1
+	30|40)
+		$CMD_DB" update requests set substatus=$2, status='starting' where uuid='$1';" >/dev/null 2>&1
 	;;
 	50)
-		$DBACCESS" update requests set substatus=50, status='running', starttime='$utime' where uuid='$1';" >/dev/null 2>&1
+		$CMD_DB" update requests set substatus=50, status='running', starttime='$utime' where uuid='$1';" >/dev/null 2>&1
+	;;
+	55)
+		$CMD_DB" update requests set substatus=55 where uuid='$1';" >/dev/null 2>&1
 	;;
 	60)
-		$DBACCESS" update requests set substatus=60, status='completed', endtime='$utime', errorcode=0, errordescription=NULL where uuid='$1';" >/dev/null 2>&1
+		$CMD_DB" update requests set substatus=60, status='completed', endtime='$utime', errorcode=0, errordescription=NULL where uuid='$1';" >/dev/null 2>&1
 
-	;;
-	"fallout")
-		case $3 in 
-			402)
-				Description="Tape not loaded into external driver"
-			;;
-			403)
-				Description="Tape not ejected from external driver"
-			;;
-		esac
 	;;
 esac
 }
@@ -282,7 +307,13 @@ function substatus_descr()
 {
 case $1 in
 	0)
-		echo "Waiting to be dispatched"
+		echo "Waiting to be loaded"
+	;;
+	4)
+		echo "Running pre-archiving checksumx "
+	;;
+	6)
+		echo "Archive precheck passed, waiting to be dispatched"
 	;;
 	10)
 		echo "Dispatched, waiting for tape device"
@@ -291,13 +322,16 @@ case $1 in
 		echo "Dispatched, waiting for tape loading"
 	;;
 	30)
-		echo "Tape being loaded o positiong"
+		echo "Tape being loaded o positioning"
 	;;
 	40)
 		echo "Tape loaded and ready"
 	;;
 	50)
-		echo "Running"
+		echo "Running - data copying"
+	;;
+	55)
+		echo "Runningi - post data processing"
 	;;
 	60)
 		echo "Completed"
@@ -308,4 +342,53 @@ case $1 in
 	*)
 	;;
 esac
+}
+#-----------------------------------------------------------------------
+#	GET_FORMAT_RULES
+#	restitusce l'eventuale stringa con le regole spazio/estensioni per format
+function get_format_rules
+{
+#	Opzioni baee (nessuna)
+MKLTFS_RULES=""
+#	ci sono regole?
+#	Se manca quella sulla dimensione non considero nemmeno quelle sulle estensioni:
+#	LTFS11157E Cannot specify a name rule without a size rule
+if ! [ -z $LTFSARCHIVER_RULESIZE ]; then
+#	Regola su size
+	MKLTFS_RULES="-r size=$LTFSARCHIVER_RULESIZE"
+	#	Regole su estensioni
+	if [ ${#LTFSARCHIVER_RULEEXTS[@]} -gt 0 ]; then
+		MKLTFS_RULES=$MKLTFS_RULES"/"
+		for ((EXTIDX=0;EXTIDX<${#LTFSARCHIVER_RULEEXTS[@]};EXTIDX++)); do
+		        [ $EXTIDX == 0 ] &&  MKLTFS_RULES=$MKLTFS_RULES"name="
+		        MKLTFS_RULES=$MKLTFS_RULES'*.'${LTFSARCHIVER_RULEEXTS[$EXTIDX]}
+		        [ $EXTIDX -lt `echo ${#LTFSARCHIVER_RULEEXTS[@]} -1 | bc` ] &&  MKLTFS_RULES=$MKLTFS_RULES':'
+		done
+	fi
+fi
+#	Ammesso override? PER ORA NO
+#( [ $LTFSARCHIVER_RULEOVER == "Y" ] || [ $LTFSARCHIVER_RULEOVER == "y" ] ) ||  MKLTFS_RULES=$MKLTFS_RULES" -o"
+MKLTFS_RULES=$MKLTFS_RULES" -o"
+echo $MKLTFS_RULES
+}
+#-----------------------------------------------------------------------
+#	GET_RSYNC_RULES
+#	restitusce l'eventuale stringa con le regole spazio/estensioni per rsync
+function get_rsync_rules
+{
+#       Opzioni baee (nessuna)
+RSYNC_RULES=""
+#       Regola per spai
+if ! [ -z $LTFSARCHIVER_RULESIZE ]; then
+	RSYNC_RULES=$RSYNC_RULES' --temp-dir /tmp --max-size='$LTFSARCHIVER_RULESIZE
+fi
+#       Regole su estensioni
+if [ ${#LTFSARCHIVER_RULEEXTS[@]} -gt 0 ]; then
+	RSYNC_RULES=$RSYNC_RULES" --include '*/'"
+	for ((EXTIDX=0;EXTIDX<${#LTFSARCHIVER_RULEEXTS[@]};EXTIDX++)); do
+		RSYNC_RULES=$RSYNC_RULES" --include='*${LTFSARCHIVER_RULEEXTS[$EXTIDX]}'"
+	done
+	RSYNC_RULES=$RSYNC_RULES" --exclude='*'"
+fi
+echo $RSYNC_RULES
 }

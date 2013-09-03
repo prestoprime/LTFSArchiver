@@ -41,17 +41,16 @@ case $TYPECODE in
 	;;
 esac
 NOREQ20="no pending mount requests"
-UUID_PND=( `$DBACCESS "$QUERY" | tr -d ' ' | tr '|' ' ' | tr '\n' ' '` )
+UUID_PND=( `$CMD_DB "$QUERY" | tr -d ' ' | tr '|' ' ' | tr '\n' ' '` )
 if [ -z $UUID_PND ]; then
 	echo '<TR><TD colspan=6>'
 	echo $TYPE": "$NOREQ20
 	echo '</TD></TR>'
 else
-	PND_IDX=0
 	#	Per ognuno degli lto richiesti inserisco riga in table
-	while [ $PND_IDX -lt ${#UUID_PND[@]} ]; do
+	for ((PND_IDX=0; PND_IDX<${#UUID_PND[@]}; PND_IDX+=2)); do
 		#	quante e quali per quel nastro?
-		UUID_FOR_TAPE=( `$DBACCESS "select id,uuid,device from requests where substatus=20 and operation='$TYPECODE' and ltotape='${UUID_PND[$PND_IDX+1]}'" \
+		UUID_FOR_TAPE=( `$CMD_DB "select id,uuid,device from requests where substatus=20 and operation='$TYPECODE' and ltotape='${UUID_PND[$PND_IDX+1]}'" \
 			| tr -d ' ' | tr '|' ' ' | tr '\n' ' '` )
 		#	Quante	sono per quel tape?
 		NUM_FOR_TAPE=`echo "${#UUID_FOR_TAPE[@]} /3" | bc`
@@ -59,9 +58,8 @@ else
 		echo '<TR><TD rowspan='$NUM_FOR_TAPE'>'${UUID_PND[$PND_IDX+1]}'</TD>'
 		echo '<TD rowspan='$NUM_FOR_TAPE'>'$TYPE'</TD>'
 		#	ID/UUID
-		UUID_IDX=0
 		unset UUID_LIST
-		while [ $UUID_IDX -lt ${#UUID_FOR_TAPE[@]} ]; do
+		for ((UUID_IDX=0; UUID_IDX<${#UUID_FOR_TAPE[@]};UUID_IDX+=3)); do
 			UUID_LIST=( ${UUID_LIST[@]} "${UUID_FOR_TAPE[$UUID_IDX+1]}" )
 			[ $UUID_IDX == 0 ] || echo '<TR>'
 			#	ID
@@ -73,9 +71,7 @@ else
 				echo '<TD rowspan='$NUM_FOR_TAPE'><A HREF=mounttape.cgi?uuidlist='`echo ${UUID_LIST[@]} | tr ' ' ','`'>confirm load</A></TD>'
 			fi
 			echo '</TR>'
-			let UUID_IDX+=3
 		done
-		let PND_IDX+=2
 	done
 	
 fi
@@ -104,7 +100,8 @@ function tabletitle()
 {
 echo '<B><FONT SIZE=+2><CENTER>'$1'</CENTER></FONT></B>'
 echo '<BR><BR>'
-echo '<TABLE style="width: 90%; text-align: center;" border="1" cellpadding="2" cellspacing="2">'
+echo '<CENTER>'
+echo '<TABLE style="width: 80%; text-align: center;" border="1" cellpadding="2" cellspacing="2">'
 echo '<TR>'
 echo '<TD>Req. tape</TD>'
 echo '<TD>Req. type</TD>'
@@ -150,4 +147,5 @@ case $PARM in
 	;;
 esac
 echo '</TABLE>'
+echo '</CENTER>'
 echo '</body></html>'

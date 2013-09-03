@@ -68,18 +68,18 @@ ALTER TABLE public.lto_info OWNER TO pprime;
 CREATE TABLE requests (
     id integer NOT NULL,
     uuid character varying(36) NOT NULL,
-    status character varying(10),
+    status character varying(12),
     substatus integer,
     operation character varying(1) NOT NULL,
     manager character varying(1) NOT NULL,
     sourcefile character varying(255) NOT NULL,
-    md5create boolean,
-    md5value text,
+    checksum character varying(10),
     sourcesize integer,
+    sourcebytes bigint,
     datatype character varying(1),
     destfile character varying(255),
     callinghost character varying(64),
-    poolname character varying(8),
+    poolname character varying(16),
     callingtime timestamp with time zone NOT NULL,
     starttime timestamp with time zone,
     endtime timestamp with time zone,
@@ -87,7 +87,7 @@ CREATE TABLE requests (
     errordescription text,
     ltotape character varying(8) DEFAULT 'n/a'::character varying,
     ltolibrary character varying(32),
-    temp character varying(255),
+    checksumfile character varying(255) DEFAULT 'none'::character varying,
     device character varying(32) DEFAULT 'n/a'::character varying
 );
 
@@ -127,4 +127,27 @@ SELECT pg_catalog.setval('requests_id_seq', 141, true);
 --
 
 ALTER TABLE ONLY requests ALTER COLUMN id SET DEFAULT nextval('requests_id_seq'::regclass);
+
+--
+-- Name: lock_table_pkey; Type: CONSTRAINT; Schema: public; Owner: pprime; Tablespace:
+--
+
+ALTER TABLE ONLY lock_table
+    ADD CONSTRAINT lock_table_pkey PRIMARY KEY (device);
+
+
+--
+-- Name: lto_info_pkey; Type: CONSTRAINT; Schema: public; Owner: pprime; Tablespace:
+--
+
+ALTER TABLE ONLY lto_info
+    ADD CONSTRAINT lto_info_pkey PRIMARY KEY (label);
+
+
+--
+-- Name: requests_pkey; Type: CONSTRAINT; Schema: public; Owner: pprime; Tablespace:
+--
+
+ALTER TABLE ONLY requests
+    ADD CONSTRAINT requests_pkey PRIMARY KEY (uuid);
 

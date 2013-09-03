@@ -40,7 +40,7 @@ function report_label()
 case $1 in
 	1)
 		#	cerco poolname e inuse su DB
-		TAPE_STAT=( `$DBACCESS"select poolname,inuse from lto_info where label='$2'" | tr -d ' ' | tr '|' ' '` )
+		TAPE_STAT=( `$CMD_DB"select poolname,inuse from lto_info where label='$2'" | tr -d ' ' | tr '|' ' '` )
 		echo '<TD>'$FONTS${TAPE_STAT[0]}$FONTE'</TD>'
 		echo '<TD>'$FONTS${TAPE_STAT[1]}$FONTE'</TD>'
 	;;
@@ -68,10 +68,8 @@ done
 echo '</SELECT>'
 echo $FONTS'Selezionare il driver di destinazione'$FONTE
 echo '<SELECT NAME="sorgente">'
-FREEDRV_IDX=0
-while [ $FREEDRV_IDX -lt ${#FREE_DRIVER_LIST[@]} ]; do
+for ((FREEDRV_IDX=0; FREEDRV_IDX<${#FREE_DRIVER_LIST[@]}; FREEDRV_IDX++)); do
 	echo '<OPTION VALUE="'${FREE_DRIVER_LIST[$FREEDRV_IDX]}'">Driver '${FREE_DRIVER_LIST[$FREEDRV_IDX]}'</OPTION>'
-	let FREEDRV_IDX+=1
 done
 echo '<INPUT TYPE=SUBMIT VALUE="CONFERMA">'
 echo '</FORM>'
@@ -127,7 +125,7 @@ echo '</FORM>'
 FONTS='<font size=-1 face="Verdana, Arial, Helvetica, sans-serif">'
 FONTE='</font>'
 . $CFGFILE
-MTX_CMD="/usr/sbin/mtx"
+CMD_MTX="/usr/sbin/mtx"
 PARM=$QUERY_STRING
 ST_TYPE="LABELS"
 command=$( get_parameter command )
@@ -140,16 +138,15 @@ case $command in
 		echo '<TABLE width=30% border=1>'
 		echo '<TR><TD>'$FONTS'Device'$FONTE'</TD><TD>'$FONTS'Stato'$FONTE'</TD>'
 		echo '<TD>'$FONTS'Cambia stato'$FONTE'</TD><TD>'$FONTS'Manutenzione'$FONTE'</TD><TD>'$FONTS'Inventory'$FONTE'</TD></TR>'
-		MC_IDX=0
-		while [ $MC_IDX -lt ${#CHANGER_DEVICES[@]} ]; do
-			MCNAMES=${CHANGER_DEVICES[$MC_IDX]}
+		for ((MC_IDX=0; MC_IDX<${#CONF_CHANGER_DEVICES[@]};MC_IDX++)); do
+			MCNAMES=${CONF_CHANGER_DEVICES[$MC_IDX]}
 			echo '<TR>'
 			echo '<TD>'$FONTS$MCNAMES$FONTE'</TD>'
 			#	se esiste il token di "nouse"..
 			if [ -f $DLTAPER_HOME/db/`basename $MCNAMES`.nouse ]; then
 				NEWSTATE="Online"
 				#	ha delle cassette su?
-				FDS=`sudo $MTX_CMD -f $MCNAMES status | grep "Data Transfer Element" | cut -d ':' -f 2 | grep -vc "Empty"`
+				FDS=`sudo $CMD_MTX -f $MCNAMES status | grep "Data Transfer Element" | cut -d ':' -f 2 | grep -vc "Empty"`
 				if [ $FDS == 0 ]; then
 					echo '<TD BGCOLOR="#FF6060">'$FONTS'Offline'$FONTE'</TD>'
 					LOCK="no"
@@ -182,17 +179,16 @@ case $command in
 			echo '<TD align=center><A HREF=MSL_changer.cgi?command=inventory&changer='$MC_IDX'>'
 			echo '<IMG SRC="/pprime/images/file.png" border=0></A></TD>'
 			echo '</TR>'
-			let MC_IDX+=1
 		done
 		echo '</TABLE>'
 		echo '</CENTER>'
 	;;
 	"inventory")
 		CHANGER_ID=$( get_parameter changer )
-		CHANGERNAME=${CHANGER_DEVICES[$CHANGER_ID]}
+		CHANGERNAME=${CONF_CHANGER_DEVICES[$CHANGER_ID]}
 		#	Creo un file temporaneo con lo status del mediachanger
 		TMPFILE=/tmp/`basename $CHANGERNAME`.txt
-		sudo $MTX_CMD -f $CHANGERNAME status > $TMPFILE
+		sudo $CMD_MTX -f $CHANGERNAME status > $TMPFILE
 		#	la mailslot e' attiva?
 		MAIL_ACT=`grep Changer $TMPFILE | awk '{ print $8 }'`
 		echo '<CENTER>'
@@ -240,9 +236,8 @@ case $command in
 		| tr ':' ' '| awk '{ print "s:"$3":"$4":"$5 }' | sed -e 's/VolumeTag=//g'` )
 		IFS=' '
 		#	Numero di righe
-		let SLOT_HALF=( ${CHANGER_SLOTS[$CHANGER_ID]}/2 )
-		SLOT_IDX=0
-		while [ $SLOT_IDX -lt $SLOT_HALF ]; do
+		let SLOT_HALF=( ${CONF_CHANGER_SLOTS[$CHANGER_ID]}/2 )
+		for ((SLOT_IDX=0; SLOT_IDX<$SLOT_HALF; SLOT_IDX++)); do
 			echo '<TR>'
 			#	Colonna di sinistra
 			IDX_SX=$SLOT_IDX
@@ -251,15 +246,13 @@ case $command in
 			let IDX_DX=($SLOT_IDX+$SLOT_HALF)
 			data_tape $IDX_DX
 			echo '</TR>'
-			let SLOT_IDX+=1
 		done
 		echo '</TABLE>'
 		#		GESTIONE MAILSLOT
 		if [ $MAIL_ACT -gt 0 ]; then
 			echo '<HR>'
 			#	quali sono?
-			MS_IDX=0
-			while [ $MS_IDX -lt ${#MSLOTS[@]} ]; do
+			for ((MS_IDX=0; MS_IDX<${#MSLOTS[@]}; MS_IDX++)); do
 				MSDATA=( `echo ${MSLOTS[$MS_IDX]} | tr ':' ' '` )
 				#	se la mailslot e' vuota form per spostare un tape nella mailslot
 				#	se la mailslot e' piena form per spostare  il tape in una slot
@@ -271,7 +264,6 @@ case $command in
 						form_carica
 					;;
 				esac
-				let MS_IDX+=1
 			done
 		fi	
 		echo '</CENTER>'
@@ -284,7 +276,7 @@ case $command in
 	"change")
 		NEWSTATUS=$( get_parameter status )
 		CHANGER_ID=$( get_parameter changer )
-		CHANGERNAME=${CHANGER_DEVICES[$CHANGER_ID]}
+		CHANGERNAME=${CONF_CHANGER_DEVICES[$CHANGER_ID]}
 		LOCKFILE=$DLTAPER_HOME/db/`basename $CHANGERNAME`.nouse
 		case $NEWSTATUS in
 			"ON")
@@ -304,19 +296,19 @@ case $command in
 		FROM=$( get_parameter sorgente )
 		TO=$( get_parameter destinazione )
 		CHANGER_ID=$( get_parameter changer )
-		CHANGERNAME=${CHANGER_DEVICES[$CHANGER_ID]}
+		CHANGERNAME=${CONF_CHANGER_DEVICES[$CHANGER_ID]}
 		echo '<CENTER>'
 		echo $FONTS
 		case $command in
 			"movetape")
 				echo "Spostamento in corso dalla locazione $FROM alla locazione $TO<BR>"
 				echo "Attendere...<BR>"
-				sudo $MTX_CMD -f $CHANGERNAME eepos 0 transfer $FROM $TO
+				sudo $CMD_MTX -f $CHANGERNAME eepos 0 transfer $FROM $TO
 			;;
 			"mounttape")
 				echo "Caricamento in corso dalla locazione $FROM al driver $TO<BR>"
 				echo "Attendere...<BR>"
-				sudo $MTX_CMD -f $CHANGERNAME load $FROM $TO
+				sudo $CMD_MTX -f $CHANGERNAME load $FROM $TO
 			;;
 		esac
 		MTXRC=$?

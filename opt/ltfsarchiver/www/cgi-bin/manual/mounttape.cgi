@@ -38,10 +38,8 @@ echo '<body bgcolor="#FFFFCC" link="#000099" vlink="#000099">'
 echo '<font size="2" face="Verdana, Arial, Helvetica, sans-serif">'
 echo '<body>'
 echo 'The following uuids have been sent to ready status:<br><br>'
-ELEM=0
-while [ $ELEM -lt ${#UUID_ITEMS[@]} ]; do
-	$DBACCESS" update requests set substatus=40, status='starting' where uuid='${UUID_ITEMS[$ELEM]}';" >/dev/null 2>&1
+for ((ELEM=0; ELEM<${#UUID_ITEMS[@]}; ELEM++)); do
+	$CMD_DB" update requests set substatus=40, status='starting' where uuid='${UUID_ITEMS[$ELEM]}';" >/dev/null 2>&1
 	echo ${UUID_ITEMS[$ELEM]}'<br>'
-	let ELEM+=1
 done
 echo '</body></html>'

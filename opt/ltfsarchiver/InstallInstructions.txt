@@ -27,36 +27,33 @@ Please follow these steps:
    tar -xvzf PrestoPRIME_LTFSArchiver_<ver>.tar.gz -C /
    This will put all the files in the correct place on the FS
 
+2) If not already present, create a system user with name "pprime":
+   useradd pprime
 
-2) Launch the installer script :
-	/opt/ltfsarchiver/sbin/utils/install.sh
+3) Create a Postgres User with name "pprime":
+   su - postgres
+   createuser pprime  (answer yes when asked to be able to create db, no otherwise)
+   exit (back to be root)
 
-The script will provide for:
-a. Check the availability of binary files:
-	mt
-	mtx
-	psql
-	rsync
-	ltfs
-	Web server according to found distribution (Ubuntu and CentOS supported)
+4) Create the LTFSArchive database with this sequence of commands:
+   su - pprime
+   createdb ltfsarchiver
+   psql -U pprime ltfsarchiver -f /opt/ltfsarchiver/sbin/utils/DB_pprimelto_schema.sql
+   exit (back to be root)
 
-b. Create the pprime system user (if not already existing), with default password: .pprime09.
-c. Create the pprime postgresql user (if not already existing)
-d. Create the needed postgresql database 
-e. Add the ltfsarchiver service to automatic startup service list
-f. Ask user if the "guessconfig script" script has to be run.
-
-
-3) Check the script log, stored into file: /opt/ltfsarchiver/conf/install.log
-
-4) Check and eventually modify the main configuration file:
+5) Check and eventually modify the main configuration file:
    /opt/ltfsarchiver/ltfsarchiver.conf
    to reflect the actual system needs and configuration
 
-5) Add the ltfsarchive service to the startup manager, using the command:
+6) Check the device configuration (libraries and lto units) using the
+   "guessconfig script": /opt/ltfsarchiver/sbin/utils/guess_conf.sh
+   the script will check and (if needed and approved) override the base
+   configuration
+
+7) Add the ltfsarchive service to the startup manager, using the command:
    update-rc.d ltfsarchiver start 90 3 5 . stop 90 0 1 2 4 6 . (Ubuntu)
 
-6) Launch the LTFSArchive service:
+8) Launch the LTFSArchive service:
    /etc/init.d/ltfsarchiver start
 
 Note: Refer to the documentation to understand the meaning of variables in

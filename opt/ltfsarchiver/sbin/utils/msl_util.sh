@@ -28,9 +28,8 @@
 #	in CHANGER_DEVICE_N restituisco il devname del mediachanger su cui l'ho trovato
 function find_tape()
 {
-IDX=0
-while [ $IDX -lt ${#CHANGER_DEVICES[@]} ]; do
-	DATA_ANSWER=( `$MTX_CMD -f ${CHANGER_DEVICES[$IDX]} status | grep $1 | tr ':' ' '` )
+for ((IDX=0; IDX<${#CONF_CHANGER_DEVICES[@]}; IDX++)); do
+	DATA_ANSWER=( `$CMD_MTX -f ${CONF_CHANGER_DEVICES[$IDX]} status | grep $1 | tr ':' ' '` )
 	# Non trovato da nessuna parte
 	if [ ${#DATA_ANSWER[@]} == 0 ]; then
 		FINDTP_RC=8
@@ -51,18 +50,17 @@ while [ $IDX -lt ${#CHANGER_DEVICES[@]} ]; do
 		esac
 		#	Questo e' il media changer che "possiede" il tape
 		CHANGER_DEVICE_I=$IDX
-		CHANGER_DEVICE_N=${CHANGER_DEVICES[$IDX]}
+		CHANGER_DEVICE_N=${CONF_CHANGER_DEVICES[$IDX]}
 		#	forzo uscita da while
-		IDX=${#CHANGER_DEVICES[@]}
+		IDX=${#CONF_CHANGER_DEVICES[@]}
 	fi
-	let IDX+=1
 done
 }
 function locate_tape()
 #	in input devnamelibreria label
 #	in output slot (o empty)
 {
-DATA_ANSWER=( `$MTX_CMD -f $1 status | grep $2 | tr ':' ' '` )
+DATA_ANSWER=( `$CMD_MTX -f $1 status | grep $2 | tr ':' ' '` )
 if [ ${DATA_ANSWER[0]} == "Storage" ]; then
 	echo ${DATA_ANSWER[2]}
 fi
@@ -71,5 +69,12 @@ function locate_slot()
 #	in input devnamelibreria
 #	in output slot libero (o empty)
 {
-echo `$MTX_CMD -f  $1 status | grep Storage | grep Empty | head -1 | tr ':' ' ' | awk '{print $3}'`
+echo `$CMD_MTX -f  $1 status | grep Storage | grep Empty | head -1 | tr ':' ' ' | awk '{print $3}'`
+}
+
+function status_dte()
+{
+actual_status=( `$CMD_MTX -f $1 status | grep "Data Transfer Element $2:" | cut -d ':' -f 2 | cut -d ' ' -f 1| tr -d ' ' | tr [A-Z] [a-z]` )
+[ $actual_status == "full" ] && actual_status=( "${actual_status[@]}"  `$CMD_MTX -f $1 status | grep "Data Transfer Element $2:" |  awk '{print $NF }'` ) 
+echo ${actual_status[@]}
 }

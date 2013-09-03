@@ -19,8 +19,8 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-function htmlhead()
-{
+#	MAIN
+. $CFGFILE
 echo 'Content-Type: text/html'
 echo 'Pragma: nocache'
 echo 'Cache-Control: no-cache, must-revalidate, no-store'
@@ -33,26 +33,9 @@ echo '<title></title>'
 echo '</head>'
 echo '<body bgcolor="#FFFFCC" link="#000099" vlink="#000099">'
 echo '<font size="2" face="Verdana, Arial, Helvetica, sans-serif">'
-echo '<hr><CENTER>'
-}
-function tabletitle()
-{
-echo '<B><FONT SIZE=+2><CENTER>'$1'</CENTER></FONT></B>'
-echo '<TABLE style="width: 90%; text-align: center;" border="1" cellpadding="2" cellspacing="2">'
-echo '<TR>'
-echo '<TD>Pool Name</TD>'
-echo '<TD>Num. Tapes</TD>'
-echo '</TR>'
-}
-
-#	MAIN
-. $CFGFILE
-htmlhead
-
-$DBACCESS_HTML  "select poolname as \"Pool Name\",count(*) as \"Num. Tapes\" from lto_info group by poolname order by poolname;" | sed -e '/row)/d' -e '/rows)/d'
-
-
-
-echo '</TABLE>'
+echo '<CENTER>'
+echo '<FONT SIZE=+2>List pool(s)</FONT><CENTER><br><br>'
+echo '<TABLE border=1 cellpadding=5>'
+$CMD_DB_HTML  "select poolname as \"Pool Name\",count(*) as \"Num. Tapes\" from lto_info group by poolname order by poolname;" | sed -e '/row)/d' -e '/rows)/d' -e '/<table/d'
 echo '</CENTER>'
 echo '</body></html>'

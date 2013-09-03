@@ -21,9 +21,9 @@ function get_tape_status()
 {
 TENTATIVO=0
 while [ $TENTATIVO -le 5 ]; do
-	TAPESTATUS=( `$MT_CMD -f $1 status |grep -E "General|Density" | sed -e 's/.*code//' -e 's/(no.*//' -e 's/ (de.*//'| sed '/General/s/[^0-9]*//g' |  tr -d ' ' | tr '\n' ' '` )
-	main_logger 4 "TAPESTATUS returned value: $TAPESTATUS"
-	[ $LTFSARCHIVER_DEBUG == 1 ] && $MT_CMD -f $1 status 
+	TAPESTATUS=( `$CMD_MT -f $1 status |grep -E "General|Density" | sed -e 's/.*code//' -e 's/(no.*//' -e 's/ (de.*//'| sed '/General/s/[^0-9]*//g' |  tr -d ' ' | tr '\n' ' '` )
+	main_logger 4 "TAPESTATUS returned values: ${TAPESTATUS[@]}"
+	[ $LTFSARCHIVER_DEBUG == 1 ] && $CMD_MT -f $1 status 
 	case ${TAPESTATUS[1]} in
 		"41010000")
 			#	ok
@@ -53,7 +53,7 @@ while [ $TENTATIVO -le 5 ]; do
 		;;
 		"10000")
 			TAPE_STATUS_RC=1
-			TAPE_STATUS_MSG=" positiong"
+			TAPE_STATUS_MSG=" positioning"
 		;;
 		"45010000")
 			TAPE_STATUS_RC=2

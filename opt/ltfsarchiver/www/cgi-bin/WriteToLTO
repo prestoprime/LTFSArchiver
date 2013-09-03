@@ -25,30 +25,42 @@
 function insert_write()
 {
 callingtime=`date '+%Y-%m-%d %H:%M:%S'`
-$DBACCESS "INSERT INTO requests ( uuid,status,substatus,manager,operation,sourcefile,sourcesize,callingtime, poolname, datatype, md5create) \
-	VALUES ( '$taskid','wait',0,'$LTFSARCHIVER_MODE','W','$filesrc',$mbsize,'$callingtime','$poolname','$itemtype','$createmd5')" > /dev/null 2>&1
+$CMD_DB "INSERT INTO requests ( uuid,status,substatus,manager,operation,sourcefile,callingtime, poolname, datatype, checksum,checksumfile) \
+	VALUES ( '$taskid','wait',0,'$LTFSARCHIVER_MODE','W','$filesrc','$callingtime','$poolname','$itemtype','$createchecksum','$checksumfile')" > /dev/null 2>&1
 RC=$?
 }
 
 
 function getresult_local()
 {
-response=( `$DBACCESS "SELECT substatus,destfile,md5value FROM requests WHERE uuid = '$taskid';" | head -1| tr -d ' ' | tr '|' ' '` )
+#response=( `$CMD_DB "SELECT substatus,destfile,md5value FROM requests WHERE uuid = '$taskid';" | head -1| tr -d ' ' | tr '|' ' '` )
+response=`$CMD_DB "SELECT substatus,destfile FROM requests WHERE uuid = '$taskid';" | \
+sed -e 's/^[ \t]*//' -e 's/[ \t]$//' -e 's/[ \t]*|[ \t]*/|/g'`
+
 if [ -z "$response" ]; then
 	[ $outformat == "JSON" ] && message='{"exit_code":"400","message":"uuid '$taskid' does not exist"}'
+	[ $outformat == "XML" ] && message="<LTFSArchiver>\n\t<EXITCODE>400</EXITCODE>\n\t<MESSAGE>$taskid does not exist</MESSAGE></LTFSArchiver>"
 	[ $outformat == "TEXT" ] && message="400\t$taskid does not exist"
 else
-	case ${response[0]} in
-		99)
+	responseSUBSTATUS=`echo "$response" | cut -d "|" -f 1`
+	responseFLOCAT=`echo "$response" | cut -d "|" -f 2`
+	case ${responseSUBSTATUS} in
+		#9|99)
+		9)
+			ERRORDESCR=`$CMD_DB "SELECT errordescription FROM requests WHERE uuid = '$taskid';"`
 			[ $outformat == "JSON" ] && message='{"exit_code":"500","message":"failure"}'
-			[ $outformat == "TEXT" ] && message="500\tFailure"
+			[ $outformat == "XML" ] && message="<LTFSArchiver>\n\t<EXITCODE>500</EXITCODE>\n\t<MESSAGE>failure</MESSAGE></LTFSArchiver>"
+			[ $outformat == "TEXT" ] && message="500\tFailure\t$ERRORDESCR"
 		;;
-		60)
-			[ $outformat == "JSON" ] && message=${response[2]}
-			[ $outformat == "TEXT" ] && message="200\tSuccess\t${response[1]} "		
+		#60)
+		19|60|99)
+			[ $outformat == "JSON" ] && message=$LTFSARCHIVER_HOME/reportfiles/$taskid.json
+			[ $outformat == "XML" ] && message=$LTFSARCHIVER_HOME/reportfiles/$taskid.xml
+			[ $outformat == "TEXT" ] && message=$LTFSARCHIVER_HOME/reportfiles/$taskid.txt
 		;;
 		*)
 			[ $outformat == "JSON" ] && message='{"exit_code":"400","message":"Not completed"}'
+			[ $outformat == "XML" ] && message="<LTFSArchiver>\n\t<EXITCODE>400</EXITCODE>\n\t<MESSAGE>Not completed</MESSAGE></LTFSArchiver>"
 			[ $outformat == "TEXT" ] && message="400\tNot completed"
 		;;
 	esac
@@ -60,32 +72,51 @@ fi
 # Script starts here
 PARM=$QUERY_STRING
 command=$( get_parameter Command )
+guicall=$( get_parameter FromGUI )
 #	Codici di substato per insert e resubmit
 case $command in
 	#	GETRESULT
 	"GetResult")
 		#	formato di output
 		outformat=$( get_parameter Output)
-		[ "$outformat" != "JSON" ] && outformat="TEXT"
+		( [ "$outformat" != "JSON" ] && [ "$outformat" != "XML" ] ) && outformat="TEXT"
 		#       devo leggere il taskid
 		taskid=$( get_parameter TaskID )
 		if [ -z $taskid ]; then
 			[ $outformat == "JSON" ] && message='{"exit_code":"400","message":"Empty ID"} '
+			[ $outformat == "XML" ] && message="<LTFSArchiver><EXITCODE>400</EXITCODE><MESSAGE>Empty ID</MESSAGE></LTFSArchiver>"
 			[ $outformat == "TEXT" ] && message="400\tEmpty ID"
 		else
 			#	====================================
 			#	Query DB, leggo info
 			getresult_local
 		fi
-		[ $outformat == "JSON" ] && output_json_common
-		[ $outformat == "TEXT" ] && output_text_common
+		case $outformat in
+			"JSON")
+				echo 'content-type: application/json'
+			;;
+			"XML")
+				echo 'content-type: text/xml'
+			;;
+			"TEXT")
+				echo 'content-type: text/plain'
+			;;
+		esac
+		echo ''
+		case $responseSUBSTATUS in
+			60|19|99)
+				cat $message
+			;;
+			*)
+				echo -e $message
+			;;
+		esac
 	;;
 	#	GETSTATUS
 	"GetStatus")
 		#       devo leggere il taskid
 		taskid=$( get_parameter TaskID )
 		if [ -z $taskid ]; then
-			#message="Empty TaskID supplied"
 			message="400\tEmpty ID"
 		else
 			#	====================================
@@ -96,46 +127,67 @@ case $command in
 	;;
 	#	WRITEFILE
 	"WriteFile"|"WriteFolder")
+		#	il substatus iniziale e' 0 di default, diventera' -10 se viene chiesto il checksum file-based
+		insert_substatus=0
 		#	Pool fornito o default?
 		poolname=$( get_parameter PoolName )
-		createmd5='false'
-		askedmd5=$( get_parameter MD5 )
+		ask4checksum=$( get_parameter Checksum )
+		[ -z $ask4checksum ] && ask4checksum=$( get_parameter MD5 )
 		[ -z $poolname ] && poolname="default"
 		#	Esiste il pool specificato?
-		esiste=`$DBACCESS "SELECT count (*) FROM lto_info WHERE poolname = '$poolname';" | sed -e 's/^\ //' -e 's/\ $//' | head -1`
+		esiste=`$CMD_DB "SELECT count (*) FROM lto_info WHERE poolname = '$poolname';" | sed -e 's/^\ //' -e 's/\ $//' | head -1`
 		if [ $esiste -gt 0 ]; then
 			#       devo leggere il nome del file da archiviare
 			filesrc=$( get_parameter FileName )
-			if [ -z $filesrc ]; then
+			if [ -z "$filesrc" ]; then
 				message="400\tEmpty FileName supplied"
 			else
-				#	Esiste? e quanto e' grande?
-				if ( [ -f $filesrc ] || [ -d $filesrc ] ); then
-					mbsize=`du -ksm $filesrc | awk '{ print $1 }'` 
-					taskid=`uuidgen`
-					[ -f $filesrc ] && itemtype="F"
-					[ -d $filesrc ] && itemtype="D"
-					#	se directory elimino eventuale "/" in coda
-					[ -d $filesrc ] && filesrc=`echo $filesrc | sed -e 's;\/$;;'`
-					[ "$askedmd5" == "Y" ] && createmd5='true'
-					#	Insert DB
-					insert_write
-					if [ $RC == 0 ]; then
-						#	restituisco dati
-						message="200\t$taskid"
-						#	se WriteFile ma oggetto e' dir, warning
-						if ( [ -d $filesrc ] && [ $command == "WriteFile" ] ); then
-							message=$message"\tWarning:folder"
-						fi
-						if ( [ -f $filesrc ] && [ $command == "WriteFolder" ] ); then
-							message=$message"\tWarning:file"
-						fi
-						
-					else
-						message="500\tFailed"
-					fi
+				#	Se il checkum e' "FILE" il file di checksum deve essere fornito, deve esistere e deve ontenere #$CHECSUMTYPE$
+				#	Per qualsiasi altro valore passo oltre
+				if [ "$ask4checksum" == "FILE" ]; then
+					Verify_CheckFile
 				else
-					message="400\t$filesrc"
+					FILEPASS="Y"
+				fi
+				if [ $FILEPASS == "Y" ]; then
+					#	Esiste? e quanto e' grande?
+					if ( [ -f "$filesrc" ] || [ -d "$filesrc" ] ); then
+						taskid=`uuidgen`
+						[ -f "$filesrc" ] && itemtype="F"
+						[ -d "$filesrc" ] && itemtype="D"
+						#	se directory elimino eventuale "/" in coda
+						[ $itemtype == "D" ] && filesrc=`echo "$filesrc" | sed -e 's;\/$;;'`
+						case "$ask4checksum" in
+							"Y"|"MD5"|"MD5_both"|"SHA1"|"SHA1_both"|"FILE")
+								createchecksum=$ask4checksum
+								#	Per retrocompatibilita'
+								[ "$ask4checksum" == "Y" ] &&  createchecksum="MD5"
+								#	Se il checksum e' su fle, cerco il relativo parametro (nome del file coi checksum)
+								[ "$ask4checksum" == "FILE" ] && checksumfile=$( get_parameter ChecksumFile )
+							;;
+							*)
+								createchecksum="none"
+							;;
+						esac
+						#	Insert DB
+						insert_write
+						if [ $RC == 0 ]; then
+							#	restituisco dati
+							message="200\t$taskid"
+							#	se WriteFile ma oggetto e' dir, warning
+							if ( [ -d "$filesrc" ] && [ $command == "WriteFile" ] ); then
+								message=$message"\tWarning:folder"
+							fi
+							if ( [ -f "$filesrc" ] && [ $command == "WriteFolder" ] ); then
+								message=$message"\tWarning:file"
+							fi
+							
+						else
+							message="500\tFailed"
+						fi
+					else
+						message="400\t$filesrc"
+					fi
 				fi
 			fi
 		else

@@ -28,16 +28,14 @@ echo $PARM | tr '&' '\n' | grep "^$1=" | sed 's/.*=//' | sed 's/\\//'
 
 function geterror()
 {
-response=( `$DBACCESS "SELECT status,errorcode,errordescription FROM requests WHERE uuid = '$taskid';" | head -1 | tr '|' ' '` )
+response=( `$CMD_DB "SELECT status,errorcode,errordescription FROM requests WHERE uuid = '$taskid';" | head -1 | tr '|' ' '` )
 if [ -z "$response" ]; then
 	message="400\t$taskid doesn't exist"
 else
 	if [ ${response[0]} == "fallout" ]; then
 		message="200\t${response[1]}\t"
-		let midx=2
-		while [ $midx -lt ${#response[@]} ]; do
+		for ((midx=2; midx<${#response[@]}; midx++)) ]; do
 			message=$message' '${response[$midx]}
-			let midx+=1
 		done
 	else
 		message="400\t$taskid is not in fallout status"

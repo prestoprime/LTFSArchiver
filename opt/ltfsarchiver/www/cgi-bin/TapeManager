@@ -25,16 +25,16 @@
 #------------------------------------
 function cercatape
 {
-trovato=`$DBACCESS" select count (*) from lto_info where label='$ltolabel';" | sed -e 's/^ *//'`
+trovato=`$CMD_DB" select count (*) from lto_info where label='$ltolabel';" | sed -e 's/^ *//'`
 }
 #------------------------------------
 function cercainpool
 {
 if [ -z $poolname ]; then
 	gianelpool=1
-	poolname=`$DBACCESS" select poolname from lto_info where label='$ltolabel'" | sed -e 's/^ *//'`
+	poolname=`$CMD_DB" select poolname from lto_info where label='$ltolabel'" | sed -e 's/^ *//'`
 else
-	gianelpool=`$DBACCESS" select count (*) from lto_info where label='$ltolabel' AND poolname='$poolname';" | sed -e 's/^ *//'`
+	gianelpool=`$CMD_DB" select count (*) from lto_info where label='$ltolabel' AND poolname='$poolname';" | sed -e 's/^ *//'`
 fi
 }
 #------------------------------------
@@ -50,7 +50,7 @@ function Add
 cercatape $ltolabel
 #	Se non esiste...  Passo 2 - insert nelle tabelle
 if [ $trovato == 0 ]; then
-	$DBACCESS" insert into lto_info (label,free,booked,poolname) VALUES ('$ltolabel',0,0,'$poolname')" >/dev/null 2>&1
+	$CMD_DB" insert into lto_info (label,free,booked,poolname) VALUES ('$ltolabel',0,0,'$poolname')" >/dev/null 2>&1
 	case $format in
 		"Y")
 			#	Se e' da formattare inserisco la richiesta di formattazione
@@ -66,7 +66,7 @@ if [ $trovato == 0 ]; then
 		;;
 	esac
 	taskid=`uuidgen`
-	$DBACCESS" insert into requests (callingtime,uuid,ltotape,operation,manager,status,substatus,sourcefile) \
+	$CMD_DB" insert into requests (callingtime,uuid,ltotape,operation,manager,status,substatus,sourcefile) \
 		VALUES('$callingtime','$taskid','$ltolabel','$ACTION','$LTFSARCHIVER_MODE','wait',0,'none')" >/dev/null 2>&1
 	#	insert 1: metto label su lto_info
 	RC1=$?
@@ -98,12 +98,12 @@ else
 		message="400\tLTO with label $ltolabel wasn't assigned to pool: $poolname"
 		result="false"
 	else	# NON elimino se e' in uso
-		inuse=`$DBACCESS" select inuse from lto_info where label='$ltolabel';" | sed -e 's/^ *//'`
+		inuse=`$CMD_DB" select inuse from lto_info where label='$ltolabel';" | sed -e 's/^ *//'`
 		if [ -z $inuse ]; then
 			#	Elimino record in lto_info
-			$DBACCESS" delete from lto_info where label='$ltolabel'" >/dev/null 2>&1
+			$CMD_DB" delete from lto_info where label='$ltolabel'" >/dev/null 2>&1
 			#	Elimino richieste da requests (solo quelle NON avviate)
-			$DBACCESS" delete from requests where ltotape='$ltolabel' and substatus=0" >/dev/null 2>&1
+			$CMD_DB" delete from requests where ltotape='$ltolabel' and substatus=0" >/dev/null 2>&1
 			RC=$?
 			if [ $RC == 0 ]; then
 				message="200\tLTO with label: $ltolabel has been deleted from pool: $poolname"
@@ -124,6 +124,7 @@ fi
 # Script starts here
 PARM=$QUERY_STRING
 command=$( get_parameter Command )
+guicall=$( get_parameter FromGUI )
 callingtime=`date '+%Y-%m-%d %H:%M:%S'`
 
 CanAct=$command
@@ -146,7 +147,6 @@ case $command in
 		format=$( get_parameter Format )
 		[ -z $format ] && format="N"
 		$CanAct
-		output_text_common
 	;;
 	"Withdraw")
 		ltolabel=$( get_parameter TapeID )
@@ -156,7 +156,6 @@ case $command in
 		fi
 		poolname=$( get_parameter PoolName )
 		$CanAct
-		output_text_common
 	;;
 	"GetStatus"|"GetResult")
                 taskid=$( get_parameter TaskID )
@@ -165,7 +164,6 @@ case $command in
                 else
                         getinfo_common
                 fi
-		output_text_common
 	;;
 	"Cancel")
                 taskid=$( get_parameter TaskID )
@@ -174,16 +172,44 @@ case $command in
 		else
 			#	Elimino da lto_info
 			#	label
-			LBL=`$DBACCESS "select ltotape from requests where uuid='$taskid';" | tr -d ' '` 
+			LBL=`$CMD_DB "select ltotape from requests where uuid='$taskid';" | tr -d ' '` 
 			#	Elimino record in lto_info
-			$DBACCESS" delete from lto_info where label='$LBL'" >/dev/null 2>&1
+			$CMD_DB" delete from lto_info where label='$LBL'" >/dev/null 2>&1
                         cancel_common "('F','C','Z')"
                 fi
-		output_text_common
 			
 	;;
 	*)
 		message=$message"400\tMissing or unknown command: $command"
+	;;
+esac
+case $guicall in
+	"true")
+
+		echo 'Content-Type: text/html'
+		echo 'Pragma: nocache'
+		echo 'Cache-Control: no-cache, must-revalidate, no-store'
+		echo ''
+		echo '<html>'
+		echo '<head>'
+		echo '<meta content="text/html; charset=iso-8859-1"'
+		echo 'http-equiv="Content-Type">'
+		echo '<title></title>'
+		echo '</head>'
+		echo '<body bgcolor="#FFFFCC" link="#000099" vlink="#000099">'
+		echo '<font size="2" face="Verdana, Arial, Helvetica, sans-serif">'
+		echo '<CENTER>'
+		echo '<center><b>Tape manager '$command' command result:</b><br><br>'
+		data=( `echo -e "$message" | tr '\t' ' '` )
+		for ((STR=1; STR<${#data[@]}; STR++)); do
+			RESULT=$RESULT" "${data[$STR]}
+		done
+		echo 'message code: '${data[0]}'<br>'
+		echo 'result: '$RESULT
+		echo '</body>'
+		echo '</html>'
+	;;
+	*)
 		output_text_common
 	;;
 esac

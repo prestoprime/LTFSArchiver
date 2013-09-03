@@ -16,9 +16,11 @@ fi
 case $OS in
 	"ubuntu")
 		WEBSRV="apache2"
+		CLEANER="tmpreaper"
 	;;
 	"centos")
 		WEBSRV="httpd"
+		CLEANER="tmpwatch"
 	;;
 esac
 echo "copying specific files for $OS"
@@ -62,9 +64,11 @@ su - pprime -c "psql -U pprime ltfsarchiver -f /opt/ltfsarchiver/sbin/utils/DB_p
 echo "adding ltfsarchiver to automatic started services (run levels 3 and 5)"
 		cp -p $rp/../../specific/ltfsarchiver.conf /etc/$WEBSRV/conf.d
 		cp -p $rp/../../specific/ltfsarchiver.$OS /etc/init.d/ltfsarchiver
+		cp -p $rp/../../specific/ltfsarchiver.cron.daily /etc/cron.daily
+		sed -e 's/___CLEANER___/'$CLEANER'/' -i /etc/cron.daily/ltfsarchiver
 case $OS in
 	"ubuntu")
-		update-rc.d ltfsarchiver start 90 3 5 . stop 90 0 1 2 4 6 .
+		update-rc.d ltfsarchiver start 90 2 3 5 . stop 90 0 1 4 6 .
 	;;
 	"centos")
 		chkconfig --add ltfsarchiver

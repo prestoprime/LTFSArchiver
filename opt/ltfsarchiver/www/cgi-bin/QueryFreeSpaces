@@ -41,8 +41,7 @@ else
 	echo '<TD>Minimum free MB</TD>'
 	echo '<TD>Maximum free MB</TD>'
 	echo '</TR>'
-	DATA_IDX=0
-	while [ $DATA_IDX -lt ${#message[@]} ]; do
+	for ((DATA_IDX=0; DATA_IDX<${#message[@]}; DATA_IDX+=5)); do
 		echo '<TR>'
 		echo '<TD>'${message[$DATA_IDX]}'</TD>'
 		echo '<TD>'${message[$DATA_IDX+1]}'</TD>'
@@ -50,7 +49,6 @@ else
 		echo '<TD>'${message[$DATA_IDX+3]}'</TD>'
 		echo '<TD>'${message[$DATA_IDX+4]}'</TD>'
 		echo '</TR>'
-		let DATA_IDX+=5
 	done
 	echo '</TABLE></BODY></HTML>'
 fi
@@ -63,11 +61,9 @@ echo ''
 if [ ${#message[@]} == 1 ]; then
 	testo="400\tNo tape found matching criteria"
 else
-	DATA_IDX=0
+	for ((DATA_IDX=0; DATA_IDX<${#message[@]}; DATA_IDX+=5)); do
 	testo="200"
-	while [ $DATA_IDX -lt ${#message[@]} ]; do
 		testo=$testo"\t(${message[$DATA_IDX]},${message[$DATA_IDX+1]},${message[$DATA_IDX+2]},${message[$DATA_IDX+3]},${message[$DATA_IDX+4]})\t"
-		let DATA_IDX+=5
 	done
 fi
 echo -e $testo
@@ -82,13 +78,11 @@ if [ ${#message[@]} == 1 ]; then
 	JsonOutput='{"exit_code":"400","message":"No tape found matching criteria"}'
 else
 	JsonOutput='{"exit_code":"200","output":['
-	DATA_IDX=0
+	for ((DATA_IDX=0; DATA_IDX<${#message[@]}; DATA_IDX+=5)); do
 	LAST_IDX=0
-	while [ $DATA_IDX -lt ${#message[@]} ]; do
 		let LAST_IDX+=5
 		JsonOutput=$JsonOutput'{"Poolname":"'${message[$DATA_IDX]}'","NumTapes":"'${message[$DATA_IDX+1]}'","Total":"'${message[$DATA_IDX+2]}'","Min":"'${message[$DATA_IDX+3]}'","Max":"'${message[$DATA_IDX+4]}'"}'
 		[ $LAST_IDX -lt ${#message[@]} ] && JsonOutput=$JsonOutput','
-		let DATA_IDX+=5
 	done
 	JsonOutput=$JsonOutput']}'
 fi
@@ -104,7 +98,7 @@ if [ -z $poolname ]; then
 else
 	QueryCommand=" select poolname, count(*) as tapes, sum(free)as total, min(free), max(free) from lto_info where poolname='$poolname' and free > 0 group by poolname;"
 fi
-datitrovati=( `$DBACCESS "$QueryCommand" | tr -d ' ' | tr '|' ' ' | tr '\n' ' '` )
+datitrovati=( `$CMD_DB "$QueryCommand" | tr -d ' ' | tr '|' ' ' | tr '\n' ' '` )
 if [ -z $datitrovati ]; then
 	message="none"
 else

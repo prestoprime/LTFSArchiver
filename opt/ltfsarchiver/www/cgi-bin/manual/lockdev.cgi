@@ -28,11 +28,11 @@ device=$( get_parameter device )
 case $action in
 	"y")
 		ACT_MSG=" locked"
-		$DBACCESS" insert into lock_table (device,ltolabel) VALUES('$device','$LTFSARCHIVER_LOCK_LABEL');" >/dev/null 2>&1
+		$CMD_DB" insert into lock_table (device,ltolabel) VALUES('$device','$LTFSARCHIVER_LOCK_LABEL');" >/dev/null 2>&1
 	;;
 	"n")
 		ACT_MSG=" unlocked"
-		$DBACCESS" delete from lock_table where device='$device';" >/dev/null 2>&1
+		$CMD_DB" delete from lock_table where device='$device';" >/dev/null 2>&1
 	;;
 esac
 EXEC_RC=$?

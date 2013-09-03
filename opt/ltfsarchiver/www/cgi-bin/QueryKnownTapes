@@ -26,16 +26,18 @@ function output_html
 echo 'Content-Type: text/html'
 echo ''
 echo '<HTML><BODY bgcolor="#FFFFCC" link="#000099" vlink="#000099">'
+echo '<font size="2" face="Verdana, Arial, Helvetica, sans-serif">'
 echo '<CENTER>'
 if [ ${#dataarray[@]} == 1 ]; then
 	echo 'No tape found'
 else
-	echo '<TABLE border=1>'
+	echo '<FONT SIZE=+2>List tapes</FONT><CENTER><br><br>'
+	echo '<TABLE border=1 cellpadding=5>'
 	echo '<TR>'
-	echo '<TD>Label</TD>'
-	echo '<TD>Free MB</TD>'
-	echo '<TD>Poolname</TD>'
-	echo '<TD>LTOtype</TD>'
+	echo '<TD><b>Label</b></TD>'
+	echo '<TD><b>Free MB</b></TD>'
+	echo '<TD><b>Poolname</b></TD>'
+	echo '<TD><b>LTOtype</b></TD>'
 	echo '</TR>'
 	DATA_IDX=0
 	while [ $DATA_IDX -lt ${#dataarray[@]} ]; do
@@ -59,16 +61,16 @@ output=$( get_parameter Output )
 poolname=$( get_parameter PoolName )
 if [ -z $pattern ]; then
 	if [ -z $poolname ]; then
-		dataarray=( `$DBACCESS" select label,free,poolname,ltotype from lto_info order by poolname,label;" | tr -d ' ' | tr '|' ' ' | tr '\n' ' '` )
+		dataarray=( `$CMD_DB" select label,free,poolname,ltotype from lto_info order by poolname,label;" | tr -d ' ' | tr '|' ' ' | tr '\n' ' '` )
 	else
-		dataarray=( `$DBACCESS" select label,free,poolname,ltotype from lto_info where poolname='$poolname' order by label;" | tr -d ' ' | tr '|' ' ' | tr '\n' ' '` )
+		dataarray=( `$CMD_DB" select label,free,poolname,ltotype from lto_info where poolname='$poolname' order by label;" | tr -d ' ' | tr '|' ' ' | tr '\n' ' '` )
 	fi
 else
 	ppattern='%'$pattern'%'
 	if [ -z $poolname ]; then
-		dataarray=( `$DBACCESS" select label,free,poolname,ltotype from lto_info where label like '$ppattern' order by poolname, label;" | tr -d ' ' | tr '|' ' ' | tr '\n' ' '` )
+		dataarray=( `$CMD_DB" select label,free,poolname,ltotype from lto_info where label like '$ppattern' order by poolname, label;" | tr -d ' ' | tr '|' ' ' | tr '\n' ' '` )
 	else
-		dataarray=( `$DBACCESS" select label,free,poolname,ltotype from lto_info where poolname='$poolname' and label like '$ppattern' order by poolname;" | tr -d ' ' | tr '|' ' ' | tr '\n' ' '` )
+		dataarray=( `$CMD_DB" select label,free,poolname,ltotype from lto_info where poolname='$poolname' and label like '$ppattern' order by poolname;" | tr -d ' ' | tr '|' ' ' | tr '\n' ' '` )
 	fi
 fi
 case $output in

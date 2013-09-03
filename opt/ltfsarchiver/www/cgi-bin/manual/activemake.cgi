@@ -68,11 +68,10 @@ ACTMP=( `mount | grep $LTFSARCHIVER_MNTAVAIL | cut -d ' ' -f 3 | tr '\n' ' '` )
 if [ -z $ACTMP ]; then
 	echo '<TR><TD colspan=6>None</T></TR>'
 else
-	ACT_IDX=0
-	while [ $ACT_IDX -lt ${#ACTMP[@]} ]; do
+	for ((ACT_IDX=0; ACT_IDX<${#ACTMP[@]}; ACT_IDX++)); do
 		LABEL=`basename ${ACTMP[$ACT_IDX]}`
-		DATA=( `$DBACCESS "select id,uuid,ltotape,device from requests where id=(select max(id) from requests where operation='A' and status='completed' and ltotape='$LABEL')" | tr -d ' ' | tr '|' ' '` )
-		MD=`$DBACCESS "select endtime from requests where uuid='${DATA[1]}'" | sed -e 's/^ *//' -e 's/ *$//'`
+		DATA=( `$CMD_DB "select id,uuid,ltotape,device from requests where id=(select max(id) from requests where operation='A' and status='completed' and ltotape='$LABEL')" | tr -d ' ' | tr '|' ' '` )
+		MD=`$CMD_DB "select endtime from requests where uuid='${DATA[1]}'" | sed -e 's/^ *//' -e 's/ *$//'`
 		CD=`date --date "$MD" +%s`
 		AD=`date +%s`
 		sectotime `echo "$AD-$CD" | bc`
@@ -84,7 +83,6 @@ else
 		echo '<TD>'${ACTMP[$ACT_IDX]}'</TD>'
 		echo '<TD>'$TIME'</TD>'
 		echo '</TR>'
-		let ACT_IDX+=1
 	done
 fi
 echo '</TABLE>'

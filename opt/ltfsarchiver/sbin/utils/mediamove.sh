@@ -37,10 +37,11 @@ else
 		main_logger 0 "Oops: $3 was not found"
 		main_logger 0 "Instances will be sent to fallout"
 		FALLOUT_CODE=301
+		LOAD_RC=99
 		LOAD_OK="N"
 	else
 		main_logger 2 "OK, $3 was found into slot n. $SRC_SLOT... loading"
-		$MTX_CMD -f $1 load $SRC_SLOT $DTE_SLOT >/dev/null 2>&1
+		$CMD_MTX -f $1 load $SRC_SLOT $DTE_SLOT >>$MAIN_LOG_ERR 2>&1
 		LOAD_RC=$?
 		main_logger 4 "LOAD_RC returned value: $LOAD_RC"
 	fi
@@ -58,21 +59,21 @@ if [ $LOAD_RC == 0 ]; then
 	else
 		main_logger 0 "Tape status error after load: RC=$TAPE_STATUS_RC (Tape is $TAPE_STATUS_MSG)... following instances will be sent to fallout"
 		FALLOUT_CODE=303
-		#	se era stato caricato da libreria provo a rimetterlo a post
-		if [ $1 != "NONE" ]; then
-			#	SMONTO
-			$MTX_CMD -f $1 unload $SRC_SLOT $DTE_SLOT >/dev/null 2>&1
-			if [ $? != 0 ]; then
-				main_logger 0 "CRITICAL ERROR while returning $3 to storage slot $SRC_SLOT"
-				FALLOUT_CODE=305 #	(303 & 304)
-			fi
-			LOAD_OK="N"
-		else
+		#	EJECT o unload a seconda che sia interno o esterno
+		if [ $1 == "NONE" ]; then
 			#	faccio solo eject
-			$MT_CMD -f $2 eject
+			$CMD_MT -f $2 eject
 			if [ $? != 0 ]; then
 				main_logger 0 "CRITICAL ERROR while ejecting $3"
 				FALLOUT_CODE=303
+			fi
+			LOAD_OK="N"
+		else
+			#	SMONTO
+			$CMD_MTX -f $1 unload $SRC_SLOT $DTE_SLOT >>$MAIN_LOG_ERR 2>&1
+			if [ $? != 0 ]; then
+				main_logger 0 "CRITICAL ERROR while returning $3 to storage slot $SRC_SLOT"
+				FALLOUT_CODE=305 #	(303 & 304)
 			fi
 			LOAD_OK="N"
 		fi
@@ -93,18 +94,33 @@ function unload_tape()
 #		$2 devicename del driver
 #	remap del tapedevice su numero di DTE
 {
+#	finche' esiste un lock aspetto
+while [ -f $LTFSARCHIVER_LOGDIR/mtx.lock ]; do
+	main_logger 1 "waiting for mtx availability"
+	sleep 1
+done
+#	blocco eventuali altre chiamate fino a che non ho scaricato
+touch $LTFSARCHIVER_LOGDIR/mtx.lock
 convert_dev_to_dte $2
 TRG_SLOT=$( locate_slot $1 )
 if [ -z $TRG_SLOT ]; then
 	UNLOAD_RC=16
 	UNLOAD_ERROR="Unable to find a free slot to move the tape"
 else
-	$MTX_CMD -f $1 unload $TRG_SLOT $DTE_SLOT >/dev/null 2>&1
-	UNLOAD_RC=$?
-	main_logger 4 "UNLOAD_RC returned value: $UNLOAD_RC"
-	if [ $UNLOAD_RC != 0 ]; then
-		UNLOAD_ERROR="Error while unloading from device $2: RC=$UNLOAD_RC"
-		main_logger 0 "$UNLOAD_ERROR"
-	fi
+	for ((attempt=1; attempt<6; attemp++)); do
+		$CMD_MTX -f $1 unload $TRG_SLOT $DTE_SLOT >>$MAIN_LOG_ERR 2>&1
+		UNLOAD_RC=$?
+		main_logger 4 "unload attempt $attempt: UNLOAD_RC returned value: $UNLOAD_RC"
+		if [ $UNLOAD_RC != 0 ]; then
+			UNLOAD_ERROR="Error while unloading from device $2: RC=$UNLOAD_RC (attempt n. $attempt)"
+			main_logger 0 "$UNLOAD_ERROR"
+			sleep `echo "$attempt * 5" | bc`
+			
+		else
+			attempt=6
+		fi
+	done
 fi
+#	rimuovo blocco mtx
+rm -f $LTFSARCHIVER_LOGDIR/mtx.lock
 }

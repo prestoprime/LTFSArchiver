@@ -21,14 +21,24 @@
 
 function get_dev_status()
 {
-LOADEDTAPE=`$DBACCESS "select ltolabel from lock_table where device='$1'" | tr -d ' '`
+LOADEDTAPE=`$CMD_DB "select ltolabel from lock_table where device='$1'" | tr -d ' '`
+#	Se risulta libero da lock_table
 if [ -z $LOADEDTAPE ]; then
-	OUTSTR='<TR><TD>'$1'</TD><TD align="center"><img src=/ltfsarchiver/images/ok.png></TD><TD><A HREF=lockdev.cgi?lock=y&device='$1'>lock</A></TD><TD>none</TD></TR>'
+	#	se esiste lock file significa che c'e un nastro "straniero" -> mostro warning e lock
+	#	vieceversa significa il device e' realmente libero -> mostro warning e lock
+	if [ -e /tmp/ltfsarchiver.`basename $1`.lock ]; then
+		imagename="warning.png"
+		tapelabel=`cat /tmp/ltfsarchiver.\`basename $1\`.lock`
+	else
+		imagename="ok.png"
+		tapelabel="none"
+	fi
+	OUTSTR='<TR><TD>'$1'</TD><TD align="center"><img src="/ltfsarchiver/images/'$imagename'"></TD><TD><A HREF=lockdev.cgi?lock=y&device='$1'>lock</A></TD><TD>'$tapelabel'</TD></TR>'
 else
 	if [ $LOADEDTAPE == $LTFSARCHIVER_LOCK_LABEL ]; then
 		OUTSTR='<TR><TD>'$1'</TD><TD align="center"><img src=/ltfsarchiver/images/lock.gif></TD><TD><A HREF=lockdev.cgi?lock=n&device='$1'>unlock</A></TD><TD>none</TD></TR>'
 	else
-		ACTIVITY=`$DBACCESS "select inuse from lto_info where label='$LOADEDTAPE'" | tr -d ' '`
+		ACTIVITY=`$CMD_DB "select inuse from lto_info where label='$LOADEDTAPE'" | tr -d ' '`
 		case $ACTIVITY in
 			"W")
 				DESCR="In use by archive"
@@ -64,21 +74,17 @@ case $LTFSARCHIVER_MODE in
 	"C"|"B")
 		echo '<table border=1 cellspacing=0 cellpadding=5>'
 		echo '<TR><TD colspan=4 align="center">Library devices</TD></TR>'
-		ccounter=0
-		while [ $ccounter -lt ${#CHANGER_DEVICES[@]} ]; do
-			tape_array_name="CHANGER_TAPE_DEV_"$ccounter"[@]"
+		for ((ccounter=0; ccounter<${#CONF_CHANGER_DEVICES[@]}; ccounter++)); do
+			tape_array_name="CONF_CHANGER_TAPEDEV_"$ccounter"[@]"
 			temp_array=( ${!tape_array_name} )
 			#	Device della libreria
-			echo '<TR><TD colspan=4>Library: '${CHANGER_DEVICES[$ccounter]}'</TD></TR>'
+			echo '<TR><TD colspan=4>Library: '${CONF_CHANGER_DEVICES[$ccounter]}'</TD></TR>'
 			echo '<TR><TD>Device</TD><TD align=center>Status</TD><TD>Action</TD><TD>TapeID</TD></TR>'
-			tcounter=0
-			while [ $tcounter -lt ${#temp_array[@]} ]; do
+			for ((tcounter=0; tcounter<${#temp_array[@]}; tcounter++)); do
 
 				get_dev_status ${temp_array[$tcounter]}
 				echo $OUTSTR
-				let tcounter+=1
 			done
-			let ccounter+=1
 		done
 		echo '</TABLE>'
 	;;
@@ -89,11 +95,9 @@ case $LTFSARCHIVER_MODE in
 		echo '<table border=1 cellspacing=0 cellpadding=5>'
 		echo '<TR><TD colspan=4 align="center">Manual devices</TD></TR>'
 		echo '<TR><TD>Device</TD><TD>Status</TD><TD>Action</TD><TD>TapeID</TD></TR>'
-                mcounter=0
-                while [ $mcounter -lt ${#MANUAL_TAPE_DEVICES[@]} ]; do
-			get_dev_status ${MANUAL_TAPE_DEVICES[$mcounter]}
+                for ((mcounter=0; mcounter<${#CONF_MANUAL_TAPEDEV[@]}; mcounter++)); do
+			get_dev_status ${CONF_MANUAL_TAPEDEV[$mcounter]}
 			echo $OUTSTR
-                        let mcounter+=1
                 done
 		echo '</TABLE>'
         ;;
