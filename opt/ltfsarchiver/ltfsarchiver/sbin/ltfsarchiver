@@ -1,0 +1,77 @@
+#!/bin/bash
+
+#  PrestoPRIME  LTFSArchiver
+#  Version: 1.0 Beta
+#  Authors: L. Savio, L. Boch, R. Borgotallo
+#
+#  Copyritght (C) 2011-2012 RAI – Radiotelevisione Italiana <cr_segreteria@rai.it>
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU Affero General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU Affero General Public License for more details.
+#
+# You should have received a copy of the GNU Affero General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
+TMP_HOME=`dirname $0`
+. $TMP_HOME/../conf/ltfsarchiver.conf
+#	Esecuzione giro su shot
+function Lavora()
+{
+if [ $LTFSARCHIVER_DEBUG == 0 ]; then
+	LTFSARCHIVER_LOG_DEBUG=/dev/null
+else
+	LTFSARCHIVER_LOG_DEBUG=$LTFSARCHIVER_HOME/logs/ltfsarchiver.`date +%Y%m%d`.err
+fi
+$LTFSARCHIVER_HOME/sbin/ltfsarchiver.sh 2>>$LTFSARCHIVER_LOG_DEBUG
+}
+
+#	Loop controllato
+function Gira_E_Aspetta()
+{
+while [ 1 == 1 ]; do
+	#	se non esiste il lock dello shell script, avvia la lavorazione
+	if ! [ -f /tmp/ltfsarchiver.lock ]; then
+		Lavora
+	else
+		#	C'e' uno script in esecuzione?
+		RUNNING=($( pidof -x ltfsarchiver.sh ))
+		#	se non c'e', significa che e' morto male
+		#		rimuovo il lock...
+		[ ${#RUNNING[@]} = 0 ] && {
+			rm -f /tmp/ltfsarchiver.lock
+			echo `date`": lock removed by wrapper" >>$LTFSARCHIVER_HOME/logs/ltfsarchiver.err
+		}
+	fi
+	sleep $IDLETTIME
+done
+}
+#	postgres e' su?
+service postgresql status >/dev/null 2>&1
+PSQL_RUN=$?
+if [ $PSQL_RUN -gt 0 ]; then
+	echo "missing postgresql instance... exiting"
+	exit 3
+fi
+
+#	sto gia' girando?
+ChiSono=`basename $0`
+sleep 2
+Processi=($( pidof -o %PPID -x $ChiSono ))
+#	Se si', esce...
+if [ ${#Processi[@]} -gt 1 ]; then
+	exit 4
+fi
+#	Timeout (default 20 secondi)
+if [ -z $LTFSARCHIVER_INTERRUN ]; then
+	IDLETTIME=60
+else
+	IDLETTIME=$LTFSARCHIVER_INTERRUN
+fi
+Gira_E_Aspetta

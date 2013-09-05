@@ -1,0 +1,41 @@
+#!/bin/bash
+#  PrestoPRIME  LTFSArchiver
+#  Version: 1.0 Beta
+#  Authors: L. Savio, L. Boch, R. Borgotallo
+#
+#  Copyritght (C) 2011-2012 RAI âadiotelevisione Italiana <cr_segreteria@rai.it>
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU Affero General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU Affero General Public License for more details.
+#
+# You should have received a copy of the GNU Affero General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+. /opt/ltfsarchiver/conf/ltfsarchiver.conf
+CLEANLOGIFLE=$LTFSARCHIVER_LOGDIR/ltfsarchiver.clean.`date +'%Y-%m-%d'`.log
+if ! (( $LTFSARCHIVER_DAYSKEEP > 0 )); then
+	echo "Bad value supplied for LTFSARCHIVER_DAYSKEEP parameter: $LTFSARCHIVER_DAYSKEEP" >> $CLEANLOGIFLE
+	exit 3
+fi
+OLDATE=`date --date "$LTFSARCHIVER_DAYSKEEP day ago" +%Y-%m-%d`
+DELETEUID=( `$CMD_DB "select uuid from requests where substatus = 60 and endtime < '$OLDATE' order by endtime;" | tr -d ' ' | tr '\n' ' '` )
+if ! [ -z $DELETEUID ]; then
+	echo "${#DELETEUID[@]} instances are going to be deleted:" > $CLEANLOGIFLE
+	for ((j=1;j<=${#DELETEUID[@]};j++)); do
+		echo -e "$j\t - db entry ${DELETEUID[$j-1]}" >> $CLEANLOGIFLE
+		$CMD_DB "delete from requests where uuid='${DELETEUID[$j-1]}';" > /dev/null 2>&1
+		for files in `find $LTFSARCHIVER_HOME/reportfiles -name ${DELETEUID[$j-1]}".*" -printf '%p\n'`; do
+			echo -e "\t - logfile $files" >> $CLEANLOGIFLE
+			rm -f $files
+		done
+	done
+else
+	echo "no instance to be deleted" >> $CLEANLOGIFLE
+fi
+___CLEANER___ -mv $LTFSARCHIVER_DAYSKEEP"d" $LTFSARCHIVER_LOGDIR >>  $CLEANLOGIFLE

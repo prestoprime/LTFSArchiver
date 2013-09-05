@@ -1,0 +1,107 @@
+#!/bin/bash
+#  PrestoPRIME  LTFSArchiver
+#  Version: 1.0 Beta
+#  Authors: L. Savio, L. Boch, R. Borgotallo
+#
+#  Copyritght (C) 2011-2012 RAI âadiotelevisione Italiana <cr_segreteria@rai.it>
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU Affero General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU Affero General Public License for more details.
+#
+# You should have received a copy of the GNU Affero General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+# chkconfig: 35 99 99
+# description: ltfsarchiver
+# processname: ltfsarchiver
+# config: /opt/ltfsarchiver/conf/ltfsarchiver.conf
+
+
+# Source function library.
+. /etc/rc.d/init.d/functions
+
+RETVAL=0
+prog="ltfsarchiver"
+
+start()
+{
+# Start daemons.
+echo -n $"Starting $prog: "
+/opt/ltfsarchiver/sbin/$prog >/dev/null 2>&1 &
+#/opt/ltfsarchiver/sbin/$prog >>/opt/ltfsarchiver/logs/stardebug.txt
+RETVAL=$?
+if [ $RETVAL -eq 0 ]; then
+	touch /var/lock/subsys/$prog
+	success $"$prog $site" 
+	echo
+else
+	RETVAL=1
+fi
+return $RETVAL
+}
+
+
+
+
+stop()
+{
+# Stop daemons.
+echo -e $"Shutting down $prog:\n"
+CONTACHECK=0
+#	il file di lock e' creato all'avvio dello script pprimelto.sh, che lo rimuove solo
+#		al termine
+while [ -f /tmp/ltfsarchiver.lock ]; do
+	let CONTACHECK=($CONTACHECK+1)
+	echo  "waiting for completion of current activity... attempt $CONTACHECK"
+	sleep 3
+	RUNNING=($( /sbin/pidof -x ltfsarchiver.sh ))
+done
+killproc $prog
+RETVAL=$?
+echo
+if [ $RETVAL -eq 0 ]; then
+	rm -f /var/lock/subsys/$prog
+fi
+return $RETVAL
+}
+
+
+
+
+# See how we were called.
+case "$1" in
+  start)
+        start
+        ;;
+  stop)
+        stop
+        ;;
+  restart|reload)
+        stop
+        start
+        RETVAL=$?
+        ;;
+  condrestart)
+        if [ -f /var/lock/subsys/$prog ]; then
+            stop
+            start
+            RETVAL=$?
+        fi
+        ;;
+  status)
+        status $prog
+        RETVAL=$?
+        ;;
+  *)
+        echo $"Usage: $0 {start|stop|restart|condrestart|status}"
+        exit 1
+esac
+
+exit $RETVAL

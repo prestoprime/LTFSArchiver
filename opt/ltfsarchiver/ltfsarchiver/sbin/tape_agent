@@ -1,0 +1,284 @@
+#!/bin/bash
+
+#  PrestoPRIME  LTFSArchiver
+#  Version: 1.0 Beta
+#  Authors: L. Savio, L. Boch, R. Borgotallo
+#
+#  Copyritght (C) 2011-2012 RAI – Radiotelevisione Italiana <cr_segreteria@rai.it>
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU Affero General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU Affero General Public License for more details.
+#
+# You should have received a copy of the GNU Affero General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
+#       1.0.0 
+#=================================================================================================
+#		TAPE_AGENT
+#=================================================================================================
+function free_resources_and_exit ()
+{
+#       sblocco il device
+$CMD_DB" delete from lock_table where device='${WORKING_PARMS[4]}'" > /dev/null 2>&1
+#	sblocco il nastro
+$CMD_DB" update lto_info set inuse=NULL where label='${WORKING_PARMS[3]}'" > /dev/null 2>&1
+#	rimuovo lock
+rm /tmp/ltfsarchiver.tape_agent.$$.lock
+main_logger 0 "------------> Completed"
+exit
+}
+#=================================================================================================
+#	MAIN MAIN MAIN
+#=================================================================================================
+#	Inizializzazione
+CFG_FILE=`dirname $0`/../conf/ltfsarchiver.conf
+if [ -f $CFG_FILE ]; then
+	. $CFG_FILE
+	#	funzioni comuni
+	. $LTFSARCHIVER_HOME/sbin/common.sh
+	MAIN_LOG_FILE=$LTFSARCHIVER_LOGDIR/`basename $0`_`date +%s`.log
+	MAIN_LOG_ERR=$LTFSARCHIVER_LOGDIR/`basename $MAIN_LOG_FILE .log`.err
+	main_logger 0 "------------> Starting..."
+	main_logger 4 "logfile: $MAIN_LOG_FILE"
+	#	POSTGRES STA GIRANDO?
+	service postgresql status >/dev/null 2>&1
+	PSQL_RUN=$?
+	if [ $PSQL_RUN -gt 0 ]; then
+		main_logger 0 "Postgresql is inactive..."
+		exit 3
+	fi
+	#	Modaliata operativa
+	#	controllo solo se diverso da MANUAL
+	case $HW_CHANGER_TYPE in
+       		"MSL")
+		       	. $LTFSARCHIVER_HOME/sbin/utils/msl_util.sh
+			main_logger 4 "MediaChanger type: $HW_CHANGER_TYPE"
+	       	;;
+	       	*)
+			main_logger 0 "Unknown MediaChanger type: $HW_CHANGER_TYPE"
+		       	exit 3
+	       	;;
+	esac
+	#	funzioni per tape
+	case $HW_TAPE_TYPE in
+		"LTO")
+			. $LTFSARCHIVER_HOME/sbin/utils/lto_util.sh
+			main_logger 4 "Tapedrive type: $HW_TAPE_TYPE"
+		;;
+		*)
+			main_logger 0 "Unknown tapedrive type: $HW_TAPE_TYPE"
+			exit 3
+		;;
+	esac
+	#	funzioni movimento nastri
+	if [ $LTFSARCHIVER_MODE != "M" ]; then
+		. $LTFSARCHIVER_HOME/sbin/utils/mediamove.sh
+	fi
+	touch /tmp/ltfsarchiver.tape_agent.$$.lock
+else
+	echo "missing cfg file"
+	exit 1
+fi
+#	Carico cfg librerie/tape
+devices_config 0        #       $1 = 0 non fa stampare output
+###############################################################################################
+OPERATION_UUIDS=( $@ )
+#	Uso la prima uuid per sapere:
+#	cosa fare (operation)
+#	come fare (manager)
+#	su cosa operare (ltodevice)
+#	se smontare il nastro o no alla fine (makeaval->no)
+#	label lto
+WORKING_PARMS=( `$CMD_DB "select operation,manager,ltolibrary,ltotape,device from requests where uuid='${OPERATION_UUIDS[0]}';" | tr -d ' ' | tr '|' ' '` ) 
+#	[0]=operazione
+#	[1]=manager
+#	[2]=libreria
+#	[3]=label
+#	[4]=tapedevice
+#-------------------
+#       Mount point:
+if [ ${WORKING_PARMS[0]} == "A" ]; then
+        MOUNT_POINT=$LTFSARCHIVER_MNTAVAIL/${WORKING_PARMS[3]}
+else
+        MOUNT_POINT=/mnt/ltfs`basename ${WORKING_PARMS[4]}`
+fi
+#	Se manager e' il robot, devo fare il load
+#if [ ${WORKING_PARMS[1]} == "C" ]; then
+	#       Mount del nastro (passo devname libreria - devname driver - label): solo se assegnato a Changer
+	main_logger 2 "Loading/checking tape ${WORKING_PARMS[3]} into driver ${WORKING_PARMS[4]}"
+	load_tape ${WORKING_PARMS[2]}  ${WORKING_PARMS[4]}  ${WORKING_PARMS[3]}
+	main_logger 4 "LOAD_OK returned value: $LOAD_OK"
+	#       Se ok, faccio forward a stato=40
+	#       Se non ok, faccio fallout
+	for ((idx=0; idx< ${#OPERATION_UUIDS[@]}; idx++)); do
+		if [ $LOAD_OK == "Y" ]; then
+			update_uuid_status ${OPERATION_UUIDS[$idx]} 40
+		else	
+			main_logger 0  ${OPERATION_UUIDS[$idx]}
+			fallout_uuid ${OPERATION_UUIDS[$idx]} $FALLOUT_CODE
+		fi
+	done
+#else 
+#	LOAD_OK="Y"	#	Caricato manualmente (si suppone che sia stato inserito... :-))
+#fi
+#	Se non ho ricevuto OK dal load, libero le risorse ed esco
+if [ $LOAD_OK != "Y" ]; then
+	#	Se format/check rimuovo anche da lto_info
+	case ${WORKING_PARMS[0]} in
+		"Z"|"F"|"C")
+			$CMD_DB" delete from lto_info where label='${WORKING_PARMS[3]}';" > /dev/null 2>&1
+		;;
+	esac
+	#	Azzero lo spazio prenotato
+	$CMD_DB" update lto_info set booked=0 where label='${WORKING_PARMS[3]}';" > /dev/null 2>&1
+	free_resources_and_exit
+fi
+#	Avanzamento
+#	Per Format / CheckSpace / Makeavailable passo in running l'istanza (che e' sempre unica)
+case ${WORKING_PARMS[0]} in
+	"Z"|"F"|"C")
+		#	Avanzo lo stato a 50
+		update_uuid_status ${OPERATION_UUIDS[0]} 50
+		#	"facciamo finta" che sia formattato
+		MKLTFSRC=0
+		#	Se F o Z prima formatto
+		FORCE=" "	#	No force
+		if ( [ ${WORKING_PARMS[0]} == "F" ] || [ ${WORKING_PARMS[0]} == "Z" ] ); then
+			[ ${WORKING_PARMS[0]} == "Z" ] && FORCE=" --force "		#OK, force
+			#	Cerco il backend da usare
+			for ((BIDX=0;BIDX<${#CONF_BACKENDS[@]};BIDX+=2)); do
+				if [ ${CONF_BACKENDS[$BIDX]} == ${WORKING_PARMS[4]} ]; then
+					TAPE_BACKEND=${CONF_BACKENDS[$BIDX+1]}
+				fi
+			done
+			FORMAT_COMMAND="$CMD_MKLTFS $FORCE --device=${WORKING_PARMS[4]} --backend=$TAPE_BACKEND --no-compression  --volume-name=${WORKING_PARMS[3]} "$( get_format_rules )
+			main_logger 1 "Tape will be formatted with the following command:"
+			main_logger 1 $FORMAT_COMMAND
+			$FORMAT_COMMAND >> $MAIN_LOG_FILE 2>&1
+			MKLTFSRC=$?
+			main_logger 5 "MKLTFSRC returned value: $MKLTFSRC"
+			if [ $MKLTFSRC == 0 ]; then
+				main_logger 0 "Tape ${WORKING_PARMS[3]} successfully formatted"
+			else
+				main_logger 0 "ERROR while formatting tape ${WORKING_PARMS[3]}"
+			fi
+		fi
+		#	Adesso lo monto in r/w
+		if [ $MKLTFSRC == 0 ]; then
+			mount_ltfs ${WORKING_PARMS[4]} ${WORKING_PARMS[3]} "rw" $MOUNT_POINT "N"
+			#	Aggiorno LTOtype
+			$CMD_DB " update lto_info set ltotype='$TAPE_STATUS_TYPE' where label='${WORKING_PARMS[3]}';" > /dev/null 2>&1 
+		else
+			fallout_uuid ${OPERATION_UUIDS[0]} 501
+			LTFS_RC=32	#	Mi serve per skippare il mount
+			#	Rimuovo nastro altrimenti non accetterebbe un nuovoinserimento
+			$CMD_DB " delete from lto_info where label='${WORKING_PARMS[3]}';" > /dev/null 2>&1
+		fi
+	;;
+	"R"|"A")
+		#	Per MAKEAVAL avanzo status a 50 - per ARCHIVE avanzero' uuid per uuid
+		[ ${WORKING_PARMS[0]} == "A" ] && update_uuid_status ${OPERATION_UUIDS[0]} 50
+		mount_ltfs ${WORKING_PARMS[4]} ${WORKING_PARMS[3]} "ro" $MOUNT_POINT "Y"
+	;;
+	"W")
+		mount_ltfs ${WORKING_PARMS[4]} ${WORKING_PARMS[3]} "rw" $MOUNT_POINT "Y"
+	;;
+esac
+#	OK, vediamo come e' andato il mount ltfs
+main_logger 4 "LTFS_RC returned value: $LTFS_RC"
+if [ $LTFS_RC == 0 ];then
+	#	Se il mount e' finito bene...
+	#	Faccio	partire lo script che lavora istanza/e /W/R) o chiudo qui (C/F/A)
+	case ${WORKING_PARMS[0]} in
+		"Z"|"F"|"C")
+			main_logger 1 "File systeam is ready in R/W; writing label"
+			#	Scrivo la label
+			touch $MOUNT_POINT/${WORKING_PARMS[3]}
+			#	assegno watermark
+			freespace=`df -m $MOUNT_POINT | grep $MOUNT_POINT | awk '{print $4}'`
+			$CMD_DB" update lto_info set free=($freespace-$TAPE_WATERMARK) where label='${WORKING_PARMS[3]}'" > /dev/null 2>&1
+			update_uuid_status ${OPERATION_UUIDS[0]} 60
+			umount $MOUNT_POINT
+			main_logger 1 "waiting for ltfs index update"
+			sleep $LTFSARCHIVER_LTFSTIMEOUT
+			main_logger 0 "Operation completed"
+		;;
+		"A")
+			main_logger 1 "File systeam is ready in R/O: tape ${WORKING_PARMS[3]} is now available online"
+			main_logger 0 "${OPERATION_UUIDS[0]} succesfully completed"
+			update_uuid_status ${OPERATION_UUIDS[0]} 60
+		;;
+		"W")
+			main_logger 1 "File systeam is ready in R/W; starting archive"
+			#	Lancio dello script di archive (passo il nome del file di log per scrivere tutto su un unico file
+			#`dirname $0`/archive_file $MAIN_LOG_FILE ${OPERATION_UUIDS[@]} 2> $MAIN_LOG_FILE.err
+			`dirname $0`/archive_file $MAIN_LOG_FILE ${OPERATION_UUIDS[@]} 2> $MAIN_LOG_ERR
+		;;
+		"R")
+			main_logger 1 "File systeam is ready in R/O: starting restore"
+			#	Lancio dello script di archive (passo il nome del file di log per scrivere tutto su un unico file
+			`dirname $0`/restore_file $MAIN_LOG_FILE ${OPERATION_UUIDS[@]} 2> $MAIN_LOG_ERR
+			#`dirname $0`/restore_file $MAIN_LOG_FILE ${OPERATION_UUIDS[@]}
+		;;
+	esac
+else
+	#	Se e' andato male vediamo che fare...
+	case $LTFS_RC in
+		2)	#	Label sbagliata o non trovata
+			#	Devo mandare in fallout tutte le richieste archive su quel tape
+			main_logger 0 "Following instances will be sent to fallout:"
+			for ((FALL_IDX=0; FALL_IDX<${#OPERATION_UUIDS[@]}; FALL_IDX++)); do
+				main_logger 0 ${OPERATION_UUIDS[$FALL_IDX]}
+				fallout_uuid ${OPERATION_UUIDS[$FALL_IDX]} 601
+			done
+		;;
+		4)		#	MOUNT RW fallito per troppo pieno
+			#	Devo mandare in riassegnazione tutte le richieste archive su quel tape
+			main_logger 0 "Following instances will be requeued:"
+			for ((RQUE_IDX=0; RQUE_IDX<${#OPERATION_UUIDS[@]}; RQUE_IDX++)); do
+				main_logger 0 ${OPERATION_UUIDS[$RQUE_IDX]}
+				$CMD_DB" update requests set status='wait',substatus=0 where uuid='${OPERATION_UUIDS[$RQUE_IDX]}';" > /dev/null 2>&1
+			done
+		;;
+		8)		#	MOUNT ERROR (FS corrotto?)
+			#	Devo mandare in fallout tutte le richieste di archive su quel tape
+			#	Devo mandare in fallout tutte le richieste di restore/makavail su quel tape
+			main_logger 0 "Following instances will be sent to fallout:"
+			for ((FALL_IDX=0; FALL_IDX<${#OPERATION_UUIDS[@]}; FALL_IDX++)); do
+				main_logger 0 ${OPERATION_UUIDS[$FALL_IDX]}
+				fallout_uuid ${OPERATION_UUIDS[$FALL_IDX]} 502
+			done
+		;;
+		32)
+			main_logger 0 "Creation of an ltfs filesystema failed: RC=$LTFS_RC. Check $MAIN_LOG_FILE for details"
+		;;
+	esac
+fi
+#	Salvo che per i Makeavailable, devo scaricare
+#	Se esterno, eject (RC da conmando)
+#	Se interno, unload (RC impostato dalla funzione)
+if ( [ ${WORKING_PARMS[0]} != "A" ] || [ $LTFS_RC -gt 0 ] ); then
+	if [ ${WORKING_PARMS[1]} == "M" ]; then
+		$CMD_MT -f ${WORKING_PARMS[4]} eject
+		UNLOAD_RC=$?
+	else
+		#	passo a dismount libreria e device
+		unload_tape ${WORKING_PARMS[2]} ${WORKING_PARMS[4]}
+	fi
+	if [ $UNLOAD_RC == 0 ]; then
+		[ ${WORKING_PARMS[1]} == "M" ] && main_logger 2 "Tape ejected"
+		[ ${WORKING_PARMS[1]} == "C" ] && main_logger 2 "Tape successfully moved to repository slot"
+		#	Libero le risorse ed esco
+		free_resources_and_exit
+	else
+		main_logger 0 "CRITICAL ERROR while unloading tape ${WORKING_PARMS[3]}"
+	fi
+		
+fi

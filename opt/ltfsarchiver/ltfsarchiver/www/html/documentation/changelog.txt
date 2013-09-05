@@ -1,0 +1,98 @@
+General
+
+Environment parameters names
+
+All of the parameters previously named "PPRIMELTO_*" have changed their name in "LTFSARCHIVER_*"
+
+
+
+ibmtape and orcltape support
+
+Added support for LTFS' backends other then "ltotape".
+The backend values are stored into a configuration array  named CONF_BACKENDS
+See LTFSArchiverConfiguration document for further info.
+
+
+===================================================================================
+
+TapeManager
+
+
+Add command
+
+Tape autodetection
+
+LTOType parameter is obsolete and it will not be considered.
+LTFSArchiver is now able to detect the correct type of LTO added, during the execution of
+the requested action (Format o Check)
+To allow LTFSArchiver detect the LTO type an manage at best its free space, three new parameter 
+arrays have been added to config file ltfsarchiver.conf
+
+LTO_ALLOWED_CODES=( 0x58 0x99 ) # 0x99 for LTO6 is not actual
+LTO_ALLOWED_TYPES=( LTO5 LTO6 )
+LTO_WATERMARK=( 20200 30200 )	# 30200 for LTO6 is estimated
+
+The following parameter has been removed:
+PPRIMELTO_LTO5LOW
+
+See LTFSArchiverConfiguration document
+
+
+Forced format
+
+Fomat option is now accepting a new value "F"; this option cause a "forced format" of the added tape,
+regardless a preexistent LTFS.
+See LTFSArchiverAPI document
+
+
+
+Uuid management
+
+An Add call now returns a TEXT message instead of an HTML page 
+The uuid assigned to request can be used to monitor the subsequent action (Check orFormat)
+using GetStatus and GetResult commands.
+If an Add requests should fail, the tape will be automatically removed from pool
+See LTFSArchiverAPI document
+
+Also Cancel command has been made available to TapeManager
+Issuing a succesful Cancel command will also delete the tape from assigne pool.
+See LTFSArchiverAPI document
+
+
+===================================================================================
+
+QueryKnownTapes
+
+LTOType field has been added to the output
+
+
+===================================================================================
+
+Web interface
+
+Locking/Unlockingtape devices
+
+A new function has been added to "Tapedevice status" page.
+The Lock/Unlock links can disable/enable the use of that specific tape device.
+
+This links are only available when a tape device is empty.
+
+
+See LTFSArchiverWebGUI document to see some sample
+See LTFSArchiverConfiguration document to know how to set related variable:
+LTFSARCHIVER_LOCK_LABEL
+
+------------------------------------------------------------------------
+
+Tape device preaassignement 
+
+When a job is dipatched to an external (not library managed) device, LTFSArchiver will
+look for a free device before showing the job itself in the "Pending jobs" interface.
+The operator wont't need to look for a free device, but the assigned one will be showed.
+The operator will simply have to confirm that the requested tape has beel loaded in the
+assigned device.
+
+
+
+
+
