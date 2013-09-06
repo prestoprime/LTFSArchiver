@@ -144,6 +144,7 @@ if [ $LTFSRC == 0 ]; then
 			#	forzo a zero il freespace
 			main_logger 0 "Tape $2 has reached its max capabilty... marking it as full"
 			$CMD_DB" update lto_info set free=0,booked=0 where label='$2';" >/dev/null 2>&1
+			bkpltoinfo
 			LTFS_RC=4
 			umount $4
 		else
@@ -176,6 +177,7 @@ else
 	main_logger 0 "Tape $2 has some FS problemi:... marking it as unusable"
 	#	forzo a zero il free space (label=$2) per non usarlo in futuro
 	$CMD_DB" update lto_info set free=0,booked=0 where label='$2';" >/dev/null 2>&1
+	bkpltoinfo
 fi
 [ -f $TEMPLOG ] && rm -f $TEMPLOG
 }
@@ -392,3 +394,9 @@ if [ ${#LTFSARCHIVER_RULEEXTS[@]} -gt 0 ]; then
 fi
 echo $RSYNC_RULES
 }
+#-----------------------------------------------------------------------
+function bkpltoinfo()
+{
+$CMD_DB "copy lto_info to STDOUT;" > $LTFSARCHIVER_HOME/poolbkp/lto_info.`date '+%s'`
+}
+

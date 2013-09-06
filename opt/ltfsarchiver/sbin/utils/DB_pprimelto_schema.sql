@@ -9,24 +9,6 @@ SET check_function_bodies = false;
 SET client_min_messages = warning;
 SET escape_string_warning = off;
 
---
--- Name: ltfsarchiver; Type: DATABASE; Schema: -; Owner: pprime
---
-
-CREATE DATABASE ltfsarchiver WITH TEMPLATE = template0 ENCODING = 'UTF8' LC_COLLATE = 'it_IT.utf8' LC_CTYPE = 'it_IT.utf8';
-
-
-ALTER DATABASE ltfsarchiver OWNER TO pprime;
-
-\connect ltfsarchiver
-
-SET statement_timeout = 0;
-SET client_encoding = 'UTF8';
-SET standard_conforming_strings = off;
-SET check_function_bodies = false;
-SET client_min_messages = warning;
-SET escape_string_warning = off;
-
 SET search_path = public, pg_catalog;
 
 SET default_tablespace = '';
@@ -34,11 +16,22 @@ SET default_tablespace = '';
 SET default_with_oids = false;
 
 --
+-- Name: db_info; Type: TABLE; Schema: public; Owner: pprime; Tablespace: 
+--
+
+CREATE TABLE db_info (
+    dbversion integer NOT NULL
+);
+
+
+ALTER TABLE public.db_info OWNER TO pprime;
+
+--
 -- Name: lock_table; Type: TABLE; Schema: public; Owner: pprime; Tablespace: 
 --
 
 CREATE TABLE lock_table (
-    device character varying(32),
+    device character varying(32) NOT NULL,
     ltolabel character varying(8)
 );
 
@@ -50,7 +43,7 @@ ALTER TABLE public.lock_table OWNER TO pprime;
 --
 
 CREATE TABLE lto_info (
-    label character varying(8),
+    label character varying(8) NOT NULL,
     free integer,
     booked integer,
     inuse character varying(1),
@@ -119,7 +112,7 @@ ALTER SEQUENCE requests_id_seq OWNED BY requests.id;
 -- Name: requests_id_seq; Type: SEQUENCE SET; Schema: public; Owner: pprime
 --
 
-SELECT pg_catalog.setval('requests_id_seq', 141, true);
+SELECT pg_catalog.setval('requests_id_seq', 671, true);
 
 
 --
@@ -128,8 +121,25 @@ SELECT pg_catalog.setval('requests_id_seq', 141, true);
 
 ALTER TABLE ONLY requests ALTER COLUMN id SET DEFAULT nextval('requests_id_seq'::regclass);
 
+
 --
--- Name: lock_table_pkey; Type: CONSTRAINT; Schema: public; Owner: pprime; Tablespace:
+-- Data for Name: db_info; Type: TABLE DATA; Schema: public; Owner: pprime
+--
+
+COPY db_info (dbversion) FROM stdin;
+1
+\.
+
+--
+-- Name: db_info_pkey; Type: CONSTRAINT; Schema: public; Owner: pprime; Tablespace: 
+--
+
+ALTER TABLE ONLY db_info
+    ADD CONSTRAINT db_info_pkey PRIMARY KEY (dbversion);
+
+
+--
+-- Name: lock_table_pkey; Type: CONSTRAINT; Schema: public; Owner: pprime; Tablespace: 
 --
 
 ALTER TABLE ONLY lock_table
@@ -137,7 +147,7 @@ ALTER TABLE ONLY lock_table
 
 
 --
--- Name: lto_info_pkey; Type: CONSTRAINT; Schema: public; Owner: pprime; Tablespace:
+-- Name: lto_info_pkey; Type: CONSTRAINT; Schema: public; Owner: pprime; Tablespace: 
 --
 
 ALTER TABLE ONLY lto_info
@@ -145,9 +155,24 @@ ALTER TABLE ONLY lto_info
 
 
 --
--- Name: requests_pkey; Type: CONSTRAINT; Schema: public; Owner: pprime; Tablespace:
+-- Name: requests_pkey; Type: CONSTRAINT; Schema: public; Owner: pprime; Tablespace: 
 --
 
 ALTER TABLE ONLY requests
     ADD CONSTRAINT requests_pkey PRIMARY KEY (uuid);
+
+
+--
+-- Name: public; Type: ACL; Schema: -; Owner: postgres
+--
+
+REVOKE ALL ON SCHEMA public FROM PUBLIC;
+REVOKE ALL ON SCHEMA public FROM postgres;
+GRANT ALL ON SCHEMA public TO postgres;
+GRANT ALL ON SCHEMA public TO PUBLIC;
+
+
+--
+-- PostgreSQL database dump complete
+--
 

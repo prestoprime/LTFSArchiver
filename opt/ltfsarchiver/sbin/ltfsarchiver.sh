@@ -119,6 +119,7 @@ case $1 in
 						else
 							#	Prenoto spazio
 							$CMD_DB" update lto_info set booked=booked+'${DATA[3]}' where label='${ASSIGNED_TAPE[1]}'" >/dev/null 2>&1
+							bkpltoinfo
 							#	Assegno tape
 							$CMD_DB" update requests set ltotape='${ASSIGNED_TAPE[1]}' where uuid='${DATA[0]}'" >/dev/null 2>&1
 							#	Update substato
@@ -469,6 +470,7 @@ for ((RQST_IDX=0; RQST_IDX<${#REQUESTED_UUIDS[@]}; RQST_IDX++)) do
 			$CMD_DB" delete from lock_table where device='${REQUESTED_UMNT[2]}'" > /dev/null 2>&1
 			#       sblocco il nastro
 			$CMD_DB" update lto_info set inuse=NULL where label='${REQUESTED_UMNT[0]}'" > /dev/null 2>&1
+			bkpltoinfo
 			update_uuid_status ${REQUESTED_UUIDS[$RQST_IDX]} 60
 			main_logger 0 "${REQUESTED_UUIDS[$RQST_IDX]} succesfully completed"
 			#	Rimuovo mount point
@@ -521,6 +523,7 @@ for SHORTOP in $TYPE_TO_PROCESS; do
 					if [ $idx == 0 ]; then
 						$CMD_DB" insert into lock_table (device,ltolabel) VALUES('$FREE_DEV','${REQUESTED_TAPES[$IDX_TAPE]}')" >/dev/null 2>&1
 						$CMD_DB" update lto_info set inuse='$SHORTOP' where label='${REQUESTED_TAPES[$IDX_TAPE]}';" >/dev/null 2>&1
+						bkpltoinfo
 					fi
 				done
 			fi

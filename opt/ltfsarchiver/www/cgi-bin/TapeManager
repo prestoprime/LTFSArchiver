@@ -51,6 +51,7 @@ cercatape $ltolabel
 #	Se non esiste...  Passo 2 - insert nelle tabelle
 if [ $trovato == 0 ]; then
 	$CMD_DB" insert into lto_info (label,free,booked,poolname) VALUES ('$ltolabel',0,0,'$poolname')" >/dev/null 2>&1
+	bkpltoinfo
 	case $format in
 		"Y")
 			#	Se e' da formattare inserisco la richiesta di formattazione
@@ -102,6 +103,7 @@ else
 		if [ -z $inuse ]; then
 			#	Elimino record in lto_info
 			$CMD_DB" delete from lto_info where label='$ltolabel'" >/dev/null 2>&1
+			bkpltoinfo
 			#	Elimino richieste da requests (solo quelle NON avviate)
 			$CMD_DB" delete from requests where ltotape='$ltolabel' and substatus=0" >/dev/null 2>&1
 			RC=$?
@@ -173,8 +175,8 @@ case $command in
 			#	Elimino da lto_info
 			#	label
 			LBL=`$CMD_DB "select ltotape from requests where uuid='$taskid';" | tr -d ' '` 
-			#	Elimino record in lto_info
 			$CMD_DB" delete from lto_info where label='$LBL'" >/dev/null 2>&1
+			bkpltoinfo
                         cancel_common "('F','C','Z')"
                 fi
 			

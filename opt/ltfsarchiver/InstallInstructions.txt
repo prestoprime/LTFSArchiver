@@ -18,6 +18,7 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #
 
+
 Please follow these steps:
 
 0) Be root:
@@ -26,6 +27,10 @@ Please follow these steps:
 1) Unpack the tar archive:
    tar -xvzf PrestoPRIME_LTFSArchiver_<ver>.tar.gz -C /
    This will put all the files in the correct place on the FS
+
+Now you can choose between to perform a manual or automatic setup process.
+
+--- Manual setup
 
 2) If not already present, create a system user with name "pprime":
    useradd pprime
@@ -52,9 +57,17 @@ Please follow these steps:
 
 7) Add the ltfsarchive service to the startup manager, using the command:
    update-rc.d ltfsarchiver start 90 3 5 . stop 90 0 1 2 4 6 . (Ubuntu)
+   chkconfig --add ltfsarchiver start 90 3 5 (CentOS)
 
 8) Launch the LTFSArchive service:
    /etc/init.d/ltfsarchiver start
+
+--- Automatic setup
+
+Launch the script /opt/ltfsarchiver/sbin/utils/install.sh
+The script will perfrom all of the described steps except steps 5) and 8);
+Step 6) will be performed only if you answer "Y" to the related prompt.
+
 
 Note: Refer to the documentation to understand the meaning of variables in
   /opt/ltfsarchiver/ltfsarchiver.conf file

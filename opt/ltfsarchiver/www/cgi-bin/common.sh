@@ -252,4 +252,8 @@ else
 	esac
 fi
 }
+function bkpltoinfo()
+{
+$CMD_DB "copy lto_info to STDOUT;" > $LTFSARCHIVER_HOME/poolbkp/lto_info.`date '+%s'`
+}
 

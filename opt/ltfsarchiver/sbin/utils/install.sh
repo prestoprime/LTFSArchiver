@@ -2,6 +2,7 @@
 #
 clear
 rp=`dirname $0`
+GOODDBVER=1
 . $rp/../../conf/ltfsarchiver.conf
 outfile=$rp/../../conf/install.log
 #	STEP 0	individuazione OS
@@ -23,7 +24,7 @@ case $OS in
 		CLEANER="tmpwatch"
 	;;
 esac
-echo "copying specific files for $OS"
+echo "checking for useful commands"
 #	STEP 1 check psql, mtx, etc
 for command in psql mtx mt ltfs rsync $WEBSRV; do
 	if [ -z `which $command` ]; then
@@ -35,8 +36,17 @@ for command in psql mtx mt ltfs rsync $WEBSRV; do
 		echo "$command found" >> $outfile
 	fi
 done
+#       POSTGRES STA GIRANDO?
+service postgresql status >/dev/null 2>&1
+PSQL_RUN=$?
+if [ $PSQL_RUN -gt 0 ]; then
+	echo "Postgresql is not running..."
+	echo "Postgresql is not running..." >> $outfile
+	exit 3
+fi
+
 #	STEP 2	utente sistema
-id -g $LTFSARCHIVER_USER 2>/dev/null
+id -g $LTFSARCHIVER_USER >/dev/null 2>&1
 if [ $? == 0 ]; then
 	echo "system user $LTFSARCHIVER_USER already existing..." >> $outfile
 else
@@ -56,15 +66,34 @@ fi
 
 #	STEP 4	creazione db
 echo "creating ltfsarchiver db..."
-su - pprime -c "createdb ltfsarchiver" >> $outfile 2>&1
-echo "initializing ltfsarchiver db..."
-su - pprime -c "psql -U pprime ltfsarchiver -f /opt/ltfsarchiver/sbin/utils/DB_pprimelto_schema.sql" > $outfile 2>&1
-
+cegia=`su - postgres -c 'psql -l' | grep -c ltfsarchiver`
+if [ $cegia -gt 0 ]; then
+	echo "ltfsarchive db already existing..."
+	echo "ltfsarchive db already existing..." >>$outfile
+	#	Versione del db
+	DBVER=`psql -U pprime -d ltfsarchiver -t -c "select dbversion from db_info;" | tr -d ' '`
+	if [ -z $DBVER ]; then
+		echo "unknown db version (surely older than needed one)"
+		exit 3
+	else
+		echo "DB version installed: $DBVER"
+		if [ $DBVER == $GOODDBVER ]; then
+			echo "Existing DB is up-to-date... skipping creation"
+		else
+			echo "Existing DB is incompatible with this versio. Please check documentation"
+			exit 3
+		fi
+	fi
+else
+	su - pprime -c "createdb ltfsarchiver" >> $outfile 2>&1
+	echo "initializing ltfsarchiver db..."
+	su - pprime -c "psql -U pprime ltfsarchiver -f /opt/ltfsarchiver/sbin/utils/DB_pprimelto_schema.sql" > $outfile 2>&1
+fi
 #	STEP 6	init.d e conf.d
 echo "adding ltfsarchiver to automatic started services (run levels 3 and 5)"
 		cp -p $rp/../../specific/ltfsarchiver.conf /etc/$WEBSRV/conf.d
 		cp -p $rp/../../specific/ltfsarchiver.$OS /etc/init.d/ltfsarchiver
-		cp -p $rp/../../specific/ltfsarchiver.cron.daily /etc/cron.daily
+		cp -p $rp/../../specific/ltfsarchiver.cron.daily /etc/cron.daily/ltfsarchiver
 		sed -e 's/___CLEANER___/'$CLEANER'/' -i /etc/cron.daily/ltfsarchiver
 case $OS in
 	"ubuntu")
@@ -87,4 +116,3 @@ case $answer in
                 echo "guess config skipped"
         ;;
 esac
-
