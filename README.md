@@ -17,7 +17,7 @@ Documentation
 
 [LTFSArchiver Installation txt-version](http://htmlpreview.github.com/?http://github.com/prestoprime/LTFSArchiver/blob/master/opt/ltfsarchiver/InstallInstructions.txt)
 
-[LTFSArchiver Installation txt-version](http://htmlpreview.github.com/?http://github.com/prestoprime/LTFSArchiver/blob/master/opt/ltfsarchiver/documentation/HTML/LTFSArchiverInstallation.htm)
+[LTFSArchiver Installation html-version](http://htmlpreview.github.com/?http://github.com/prestoprime/LTFSArchiver/blob/master/opt/ltfsarchiver/documentation/HTML/LTFSArchiverInstallation.htm)
 
 [LTFSArchiver Configuration](http://htmlpreview.github.com/?http://github.com/prestoprime/LTFSArchiver/blob/master/opt/ltfsarchiver/documentation/HTML/LTFSArchiverConfiguration.htm)
 
