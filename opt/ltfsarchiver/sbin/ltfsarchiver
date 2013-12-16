@@ -27,7 +27,7 @@ function Lavora()
 if [ $LTFSARCHIVER_DEBUG == 0 ]; then
 	LTFSARCHIVER_LOG_DEBUG=/dev/null
 else
-	LTFSARCHIVER_LOG_DEBUG=$LTFSARCHIVER_HOME/logs/ltfsarchiver.`date +%Y%m%d`.err
+	LTFSARCHIVER_LOG_DEBUG=$LTFSARCHIVER_LOGDIR/ltfsarchiver.`date +%Y%m%d`.err
 fi
 $LTFSARCHIVER_HOME/sbin/ltfsarchiver.sh 2>>$LTFSARCHIVER_LOG_DEBUG
 }
@@ -46,7 +46,7 @@ while [ 1 == 1 ]; do
 		#		rimuovo il lock...
 		[ ${#RUNNING[@]} = 0 ] && {
 			rm -f /tmp/ltfsarchiver.lock
-			echo `date`": lock removed by wrapper" >>$LTFSARCHIVER_HOME/logs/ltfsarchiver.err
+			echo `date`": lock removed by wrapper" >>$LTFSARCHIVER_LOGDIR/ltfsarchiver.err
 		}
 	fi
 	sleep $IDLETTIME
