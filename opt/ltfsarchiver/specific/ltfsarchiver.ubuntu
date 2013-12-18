@@ -145,7 +145,7 @@ case "$1" in
         exit $RC
     ;;
     **)
-        echo "Usage: $0 {start|stop|restart}" 1>&2
+        echo "Usage: $0 {start|stop|restart|status}" 1>&2
         exit 1
     ;;
 esac
