@@ -64,7 +64,8 @@ echo '<hr>'
 echo "<CENTER>LTFSArchiver - Ver. $VERSION"
 echo '<BR>'
 #echo 'Welcome, '$TEMP'<br><br>'
-echo 'Welcome, '$REMOTE_USER'<br><br>'
+[ $REMOTE_USER ] && echo 'Welcome, '$REMOTE_USER
+echo '<br><br>'
 echo "Menu ("
 case $LTFSARCHIVER_MODE in
 	"C"|"c")
