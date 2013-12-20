@@ -53,7 +53,7 @@ case $1 in
 			esac
 		else
 			main_logger 0 "Running in Manual mode... Tape ${DATA[1]} not searched"
-			update_uuid_status ${DATA[0]} 10 "M" 
+			update_uuid_status ${DATA[0]} 10 "M" "NONE"
 		fi
 	;;
 	"U")
