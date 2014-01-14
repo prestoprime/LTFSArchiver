@@ -1,0 +1,84 @@
+#!/bin/tcsh -f
+
+#  ltfsa_cli
+#  Version: 0.0.1
+#  Authors: L. Boch
+#
+#  Copyright (C) 2013-2014 RAI - Radiotelevisione Italiana <cr_segreteria@rai.it>
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU Affero General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU Affero General Public License for more details.
+#
+# You should have received a copy of the GNU Affero General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
+
+set echo_style = both
+set this = `basename $0`
+if ( !($?pdir) ) then
+	echo
+	echo "$this Error "
+	echo "\tVariable 'pdir' must be defined in environment"
+	echo
+	exit 99
+endif
+set tapeid = null
+set format = `cat $pdir/config/format`
+set outfile = null
+set output = `cat $pdir/config/output`
+set curloptions = `cat $pdir/config/curloptions`
+set ltfsaserverurl = `cat $pdir/config/ltfsaserverurl`
+set service = `echo $this | sed -e s/ltfsa_//`
+set help = 0
+set i = 1
+while ( $i <= $#argv )
+	if ( "$argv[$i]" == "-t" || "$argv[$i]" == "--TapeID" ) then
+		@ i++
+		set tapeid = "$argv[$i]"
+	else if ( "$argv[$i]" == "-f" || "$argv[$i]" == "--Output" ) then
+		@ i++
+		set output = "$argv[$i]"
+	else if ( "$argv[$i]" == "-o" ) then
+		@ i++
+		set outfile = "$argv[$i]"
+	else if ( "$argv[$i]" == "-h" || "$argv[$i]" == "--help" ) then
+		set help = 1
+	else
+		set help = 1
+	endif
+	@ i++
+end
+#
+#Sanity Check
+#
+if ( $help || "$tapeid" == null  || ( "$output" != "XML" && "$output" != "JSON" ) ) then
+	echo
+	echo "\tUsage:"
+	echo "\t$this [-f|--Output XML|JSON] [-o <outfile>] [-h|--help] -t|--TapeID <TapeID>"
+	echo
+	exit 400
+endif
+#
+#Calling the service
+#
+curl $curloptions "$ltfsaserverurl/$service?Output=$output&TapeID=$tapeid" -o $pdir/logs/$this.$$.out >& $pdir/logs/$this.$$.log
+set ret = $?
+if ( $ret ) then
+	echo "$this got $ret"
+	cat $pdir/logs/$this.$$.log
+	exit 500
+endif
+rm $pdir/logs/$this.$$.log
+if ( "$outfile" != null ) then
+	mv $pdir/logs/$this.$$.out $outfile
+else
+	cat $pdir/logs/$this.$$.out
+endif
+exit 0
