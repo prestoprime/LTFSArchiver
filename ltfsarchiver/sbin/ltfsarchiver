@@ -1,7 +1,7 @@
 #!/bin/bash
 
 #  PrestoPRIME  LTFSArchiver
-#  Version: 1.0 Beta
+#  Version: 1.3
 #  Authors: L. Savio, L. Boch, R. Borgotallo
 #
 #  Copyritght (C) 2011-2012 RAI – Radiotelevisione Italiana <cr_segreteria@rai.it>
@@ -21,38 +21,40 @@
 
 TMP_HOME=`dirname $0`
 . $TMP_HOME/../conf/ltfsarchiver.conf
-#	Esecuzione giro su shot
+#	Start ltfsarchiver.sh
 function Lavora()
 {
+#	Redirect stderr to null or to a file according to DEBUG flag
 if [ $LTFSARCHIVER_DEBUG == 0 ]; then
 	LTFSARCHIVER_LOG_DEBUG=/dev/null
 else
-	LTFSARCHIVER_LOG_DEBUG=$LTFSARCHIVER_LOGDIR/ltfsarchiver.`date +%Y%m%d`.err
+	LTFSARCHIVER_LOG_DEBUG=$LTFSARCHIVER_HOME/logs/ltfsarchiver.`date +%Y%m%d`.err
 fi
 $LTFSARCHIVER_HOME/sbin/ltfsarchiver.sh 2>>$LTFSARCHIVER_LOG_DEBUG
 }
 
-#	Loop controllato
+#	MAIN LOOP
 function Gira_E_Aspetta()
 {
 while [ 1 == 1 ]; do
-	#	se non esiste il lock dello shell script, avvia la lavorazione
+	#	Verify if another instace is running
+	#		if lock file doesn't exists
 	if ! [ -f /tmp/ltfsarchiver.lock ]; then
+		#	start
 		Lavora
 	else
-		#	C'e' uno script in esecuzione?
+		#	if exixts ther SHOULD be a running task
 		RUNNING=($( pidof -x ltfsarchiver.sh ))
-		#	se non c'e', significa che e' morto male
-		#		rimuovo il lock...
+		#	If no running task is found, removes lock, otherwise exits
 		[ ${#RUNNING[@]} = 0 ] && {
 			rm -f /tmp/ltfsarchiver.lock
-			echo `date`": lock removed by wrapper" >>$LTFSARCHIVER_LOGDIR/ltfsarchiver.err
+			echo `date`": lock removed by wrapper" >>$LTFSARCHIVER_HOME/logs/ltfsarchiver.err
 		}
 	fi
 	sleep $IDLETTIME
 done
 }
-#	postgres e' su?
+#	check postgresql
 service postgresql status >/dev/null 2>&1
 PSQL_RUN=$?
 if [ $PSQL_RUN -gt 0 ]; then
@@ -60,15 +62,15 @@ if [ $PSQL_RUN -gt 0 ]; then
 	exit 3
 fi
 
-#	sto gia' girando?
+#	let's check if I'm already running
 ChiSono=`basename $0`
 sleep 2
 Processi=($( pidof -o %PPID -x $ChiSono ))
-#	Se si', esce...
+#	Not more than one copy is allowed
 if [ ${#Processi[@]} -gt 1 ]; then
 	exit 4
 fi
-#	Timeout (default 20 secondi)
+#	Timeout (default 20 seconds)
 if [ -z $LTFSARCHIVER_INTERRUN ]; then
 	IDLETTIME=60
 else

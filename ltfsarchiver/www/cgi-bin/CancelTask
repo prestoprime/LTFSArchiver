@@ -1,0 +1,132 @@
+#!/bin/bash
+#  PrestoPRIME  LTFSArchiver
+#  Version: 1.3
+#  Authors: L. Savio, L. Boch, R. Borgotallo
+#
+#  Copyritght (C) 2011-2012 RAI – Radiotelevisione Italiana <cr_segreteria@rai.it>
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU Affero General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU Affero General Public License for more details.
+#
+# You should have received a copy of the GNU Affero General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+function cancel_taskid
+{
+response=( `$CMD_DB "SELECT substatus, operation FROM requests WHERE uuid = '$taskid';" | tr -d ' ' | tr '|' ' ' ` )
+case ${response[0]} in
+        0)      #       cancello senza problemi
+                CANDELETE="Y"
+		case ${response[1]} in
+			"C"|"F"|"Z")	#	AddTape task... the tape has to removed from lto_info table
+				TAPETODEL=`$CMD_DB "SELECT ltotape  FROM requests WHERE uuid='$taskid'"| tr -d ' ' `
+				$CMD_DB "delete from lto_info where label='$TAPETODEL'" > /dev/null 2>&1
+				if [ $? -gt 0 ]; then
+					CANDELETE="F"
+				else
+	                		CANDELETE="Y"
+				fi
+			;;
+		esac
+        ;;
+        10|99)  #	Write task... booked space has to be decreased
+		case ${response[1]} in
+			"W")
+                        	TAPE2UNBOOK=( `$CMD_DB "SELECT ltotape,sourcesize FROM requests WHERE uuid = '$taskid'" | tr -d ' ' | tr '|' ' ' ` )
+	                        $CMD_DB "UPDATE lto_info set lastupdate='$RECEIVEDTIME',booked=booked-${TAPE2UNBOOK[1]} WHERE label='${TAPE2UNBOOK[0]}';" > /dev/null 2>&1
+				if [ $? -gt 0 ]; then
+					CANDELETE="F"
+				else
+	                		CANDELETE="Y"
+				fi
+			;;
+			*)
+	                	CANDELETE="Y"
+			;;
+		esac
+        ;;
+        9|19)   #       Only possible during Write... no unbook is needed
+                CANDELETE="Y"
+        ;;
+        *)	#	Delete usually is not allowed, as task is started and working
+                CANDELETE="N"
+		#	Allowed only if substatus=20 and task is assigned to operator,
+		#		as is waiting for manual loading
+		#		tape has to be deleted from both lto_info and lock_tables
+		if [ ${response[0]} == 20 ]; then
+			if [ `$CMD_DB "SELECT ltolibrary from requests WHERE uuid = '$taskid'" | tr -d ' '` == "NONE" ]; then
+				TAPETODEL=`$CMD_DB "SELECT ltotape  FROM requests WHERE uuid='$taskid'"| tr -d ' ' `
+				$CMD_DB "delete from lto_info where label='$TAPETODEL'" > /dev/null 2>&1
+				if [ $? == 0 ]; then
+					$CMD_DB "delete from lock_table where ltolabel='$TAPETODEL'" > /dev/null 2>&1
+					if [ $? == 0 ]; then
+						CANDELETE="Y"
+					else
+		                		CANDELETE="F"
+					fi
+				else
+					CANDELETE="F"
+				fi
+			fi
+		fi
+        ;;
+esac
+#	Action according to BANDELETE value
+case $CANDELETE in
+	"Y")
+	        $CMD_DB "delete from requests WHERE uuid='$taskid';" > /dev/null 2>&1
+        	if [ $? == 0 ]; then
+	                exitcode="200"; message="$taskid deleted"
+	        else
+	                exitcode="500"; message="Error occurred while removing TaskID"
+        	fi
+	;;
+	"N")
+        	exitcode="400"; message="$taskid is not in deletable status"
+	;;
+	"F")
+		exitcode="500"; message="Error occurred while freeing LTO resource"
+	;;
+esac
+}
+
+
+. $CFGFILE
+. `dirname $0`/common.sh
+command=`basename $0`
+PARM=$QUERY_STRING
+RECEIVEDTIME=`date +'%Y-%m-%dT%H:%M:%S'`
+VALIDPARMS="TaskID|FromGUI|Output"
+output=$( get_parameter Output )
+normalize_output
+get_supplied_parameters
+taskid=$( get_parameter TaskID )
+guicall=$( get_parameter FromGUI )
+if [ -z $output ]; then
+	output=`echo $LTFSARCHIVER_OUTPUT | tr '[A-Z]' ' [a-z]'`
+	PARM=$PARM'&Output='$output
+fi
+[ -z $guicall ] && guicall=false
+if ! [ -z "$BADPARMS" ]; then
+	exitcode="400"; message="${BADPARMS}"
+else
+	if [ -z $taskid ]; then
+		exitcode="400"; message="Empty TaskID supplied"
+	else
+		exists=( `$CMD_DB "SELECT count (*) from requests WHERE uuid = '$taskid';" | tr -d ' ' | tr '|' ' ' ` )
+		if [ $exists = 0 ]; then
+			exitcode="404"; message="TaskID not found"
+		else
+			cancel_taskid $taskid
+		fi
+	fi
+fi
+crea_xml_answer
+send_output
+

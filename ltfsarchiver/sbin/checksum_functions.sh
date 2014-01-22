@@ -1,5 +1,5 @@
 #  PrestoPRIME  LTFSArchiver
-#  Version: 1.0 Beta
+#  Version: 1.3
 #  Authors: L. Savio, L. Boch, R. Borgotallo
 #
 #  Copyritght (C) 2011-2012 RAI – Radiotelevisione Italiana <cr_segreteria@rai.it>
@@ -20,16 +20,19 @@
 function checksum_config()
 {
 ################################################################################################
-#       Gestione checksum
-#               Comandi da usare, file da usare per confronto, etc
+#       Checksum management
+#               Commands to be used, test to pe performed, etc-
 ################################################################################################
+#	
 CHECKSUMCREATE=${UUID_DATA[2]}
 case $CHECKSUMCREATE in
 	"MD5"|"MD5_both"|"SHA1"|"SHA1_both")
+		#	Determine the checksum method (SHA1 vs MD5)
 		CHECKSUMTYPE=`echo $CHECKSUMCREATE | sed -e 's/_/ /' | awk '{print $1}'`
 		tmp="CMD_"$CHECKSUMTYPE
 		CHECKSUMCMD=${!tmp}
-		#	Devo testare i checksum?
+		#	xxx_both -> match test has to be executed
+		#	otherwise -> no match test has to be executed
 		if [ "`echo $CHECKSUMCREATE | sed -e 's/_/ /' | awk '{print $2}'`" == "both" ]; then
 			MATCHTEST="Y"
 		else
@@ -37,15 +40,16 @@ case $CHECKSUMCREATE in
 		fi
 	;;
 	"FILE")
-		#	file di checksumA
+		#	calculated checksum will be tested against a supplied value
+		#	name of the file supplied
+		#		exixtence of file and first line syntax have been checked by WriteToLTO API
 		CHECKSUMSUPPLIED=`$CMD_DB"select checksumfile from requests where uuid='$WORKING_UUID'" | sed -e 's/^[ \t]*//'`
+		#	Determine the checksum method (SHA1 vs MD5)
 		CHECKSUMTYPE=`head -1 $CHECKSUMSUPPLIED | sed -e 's/^#//'`
 		tmp="CMD_"$CHECKSUMTYPE
 		CHECKSUMCMD=${!tmp}
-
 		MATCHTEST="FILE"
-
-		#	creazione del file temporaneo con i checksum
+		#	Creation of a temp file... FLocat is sedded to recreate the absolute pathname of each file
 		case  ${UUID_DATA[0]} in
 			"D"|"d")
 				grep -v '^#' "$CHECKSUMSUPPLIED" | sed -re '/\*lto/s;\*lto.*:.*:.{36};\*'`dirname "$UUID_DATA_SOURCE"`';' > /tmp/$WORKING_UUID.checksumsupplied.txt
@@ -56,106 +60,83 @@ case $CHECKSUMCREATE in
 		esac
 
 	;;
-	*)      #       Qualsiasi sia il valore impostato a cfg, NON salvo
-		CHECKSUMSAVE="N"
+	"N")	#	Checksums will not be calculated nor matched
 		MATCHTEST="N"
 	;;
 esac
-################################################################################################
-#       Se checkumcreate e' diverso da false devo anche vedere se devo creare il file
-#               conteneente i checksum e che verra' poi copiato sul nastro
-################################################################################################
-if [ $CHECKSUMCREATE == "none" ]; then
-	main_logger 1 "No checksum mode/type requested: report file not to be created"
-else
-	CHECKSUMSAVE="Y"
-	main_logger 1 "Checksum file requested ($CHECKSUMFMT format)"
-fi
+#	Log of checksum management parms
 main_logger 2 "######### Checksum management for taskid: $WORKING_UUID"
 main_logger 2 "- CHECKSUMCREATE: $CHECKSUMCREATE"
 main_logger 2 "- CHECKSUMTYPE: $CHECKSUMTYPE"
-main_logger 2 "- CHECKSUMSAVE: $CHECKSUMSAVE"
-main_logger 2 "- CHECKSUMFMT: $CHECKSUMFMT"
 main_logger 2 "- MATCHTEST: $MATCHTEST"
-main_logger 2 "- CHECKSUMSUPPLIED: $CHECKSUMSUPPLIED"
-main_logger 2 "- CHECKSUM_CFG_OK: $CHECKSUM_CFG_OK"
+[ $CHECKSUMCREATE == "FILE" ]  && main_logger 2 "- CHECKSUMSUPPLIED: $CHECKSUMSUPPLIED"
 main_logger 2 "######################################################################"
 }
 
 function manage_checksum()
 {
-#	Quello del file salvato lo calcolo comunque
+#	On-tape-saved file checksuma -> temp_chsum_saved
 main_logger 1 "creating checksum value for saved file: $archfile"
 temp_chsum_saved=`$CHECKSUMCMD "$archfile" | cut -d ' ' -f 1`
-
+#	datetime of check... it will be stored
+checktime=`date +'%Y-%m-%dT%H:%M:%S'`
+#	what about tests and matches?
 case $MATCHTEST in
-	"N")
+	"N")	#	No further action is required. Creates a Flocat with minimun info set
 		main_logger 1 "source file checksum not required"
 		#	Scrivo su output
-		#	xml
-		echo -e "\t\t"'<checksum type="'$CHECKSUMTYPE'" value="'$temp_chsum_saved'" />' >> $XmlOutput
-		#	json
-		echo '"checksum":{"type":"'$CHECKSUMTYPE'","value":"'$temp_chsum_saved'"}}' >>$JsonOutput
+		FLOCATLIST=$FLOCATLIST"\t\t\t"'<FLocat xlink:href="'${SINGLE_FLOCAT}'" size="'$archivedsize'" lastModified="'$archivedlastmod'">'
+		FLOCATLIST=$FLOCATLIST"\n\t\t\t\t"'<checksum type="'$CHECKSUMTYPE'" value="'$temp_chsum_saved'"/>'
 		MATCH_RESULT="none"
 		checkmatchok="Y"
 	;;
-	"Y")
-		sourcefile=`echo "$archfile" | sed -e 's;'$TEMP_TARGET';'\`dirname $UUID_DATA_SOURCE\`';'`
+	"Y")	#	Match test against source. Source checksum calculation -> temp_chsum_source
 		main_logger 1 "creating checksum value for source file $sourcefile"
+		sourcefile=`echo "$archfile" | sed -e 's;'$TEMP_TARGET';'\`dirname $UUID_DATA_SOURCE\`';'`
 		temp_chsum_source=`$CHECKSUMCMD "$sourcefile" | cut -d ' ' -f 1`
-		##############################################################################################################
-		##		RANDOM CHECKSUM
-		#NUMBER=$[ ( $RANDOM % 3 ) ]
-		#[ $NUMBER == 0 ] && temp_chsum_source=$temp_chsum_source"FAKE"
-		##		RANDOM CHECKSUM
-		##############################################################################################################
-		#	match?
+		#	Do they match?
 		if [ $temp_chsum_saved == $temp_chsum_source ]; then
+			#	YES, create a "matching" Flocat
 			good_checksum_match
 		else
-			#	1) Rinominare il file target in .corrupted
+			#	NO, create a "matching" Flocat where file is renamed as ".corrupted"
 			bad_checksum_match
 		fi
 	;;
-	"FILE")		#	cat inputcfile.txt | grep -v "^#" | sed -re '/\*lto/s;\*lto.*:.*:.{36};\*/var/pippo;' | grep /var/pippo/testdirvuoti/conspazi/lower.txt | cut -d ' ' -f 1
+	"FILE")	#	Look into the supplied checksum list to find the expected value
+		#		Beginning with setting filename too be searched
 		sourcefile=`echo "$archfile" | sed -e 's;'$TEMP_TARGET';'\`dirname $UUID_DATA_SOURCE\`';'`	#	Path del file sorgente
 		main_logger 1 "reading checksum value for source file: $sourcefile"
-		#	Devo cercare sul file che mi e' stato passato...
+		#		Gree in to the list...
 		temp_chsum_source=`cat /tmp/$WORKING_UUID.checksumsupplied.txt | grep -v "^#" | grep -F "$sourcefile" | cut -d ' ' -f 1`
-		#SUPPLIEDVALUE=`cat $CHECKSUMSUPPLIED | grep -v "^#" | grep -F "$sourcefile" | cut -d ' ' -f 1`
+		#		Log values
 		main_logger 2 "SUPPLIED VALUES - FILE: ""$sourcefile"" - Checksum: *$temp_chsum_source*"
 		main_logger 2 "CALCULATED VALUES - FILE: ""$archfile"" - Checksum: $temp_chsum_saved"
-		#	Combinano?
-		#	se il valore fornito e' nullo ------>UNVERIFIED
+		#	Maybe a file (new one?) has been archived bat not referenced in the checksum supplied list
 		if [ -z $temp_chsum_source ]; then
-			#	1) Rinominare il file target in .unverified
+			#	create a "unverified" Flocat where file is renamed as ".unverified"
 			unverified_checksum
-			#	Alzo il flag che a fine lavoro mi fara' mettere il taskid in fallout (sentire prima BOCH)
 		else
+			#	Do they match?
 			if [ "$temp_chsum_source" == $temp_chsum_saved ]; then
+				#	YES, create a "matching" Flocat
 				good_checksum_match
 			else
+				#	NO, create a "matching" Flocat where file is renamed as ".corrupted"
 				bad_checksum_match
 			fi
 		fi
 	;;
 esac
-#	chiudo tag FLOCAT su xml
-echo -e "\t</FLocat>" >> $XmlOutput
-#	Aggiorno file coi checksum
-if [ $CHECKSUMSAVE == "Y" ]; then
-	#	Eventuale continuazione per JSON
-	( [ "$CHECKSUMFMT" == "json" ] && [ $LINE_IDX -lt $NUMLINES ] ) && echo ',' >> $JsonOutput
-fi
+#	FLocat TAG closing
+FLOCATLIST=$FLOCATLIST"\n\t\t\t"'</FLocat>'"\n"
 }
 ######################################################################################################
 function good_checksum_match()				
 {
-
-#	json
-echo '"checksum":{"type":"'$CHECKSUMTYPE'","expectedvalue":"'$temp_chsum_source'","value":"'$temp_chsum_saved'","match":"true"}}' >> $JsonOutput
-#	xml
-echo -e "\t\t"'<checksum type="'$CHECKSUMTYPE'" expectedvalue="'$temp_chsum_source'" value="'$temp_chsum_saved'" match="true"/>' >> $XmlOutput
+#	FLOCATLIST feed
+FLOCATLIST=$FLOCATLIST"\t\t\t"'<FLocat xlink:href="'${SINGLE_FLOCAT}'" size="'$archivedsize'" lastModified="'$archivedlastmod'">'
+FLOCATLIST=$FLOCATLIST"\n\t\t\t\t"'<checksum type="'$CHECKSUMTYPE'" expectedvalue="'$temp_chsum_source'" value="'$temp_chsum_saved'" lastChecked="'$checktime'" match="true"/>'
 MATCH_RESULT="true"
 checkmatchok="Y"
 }
@@ -164,32 +145,23 @@ checkmatchok="Y"
 function bad_checksum_match()
 {
 mv "$archfile" "$archfile.corrupted"
-#	2) Editare nei file di output il nome del file appendendo .corrupted
-sed -e 's;'"$SINGLE_FLOCAT"';'"$SINGLE_FLOCAT.corrupted"';' -i $JsonOutput 
-sed -e 's;'"$SINGLE_FLOCAT"';'"$SINGLE_FLOCAT.corrupted"';' -i $XmlOutput
-#	json
-echo '"checksum":{"type":"'$CHECKSUMTYPE'","expectedvalue":"'$temp_chsum_source'","value":"'$temp_chsum_saved'","match":"false"}}' >> $JsonOutput
-#	xml
-echo -e "\t\t"'<checksum type="'$CHECKSUMTYPE'" expectedvalue="'$temp_chsum_source'" value="'$temp_chsum_saved'" match="false"/>' >> $XmlOutput
+#	FLOCATLIST feed
+FLOCATLIST=$FLOCATLIST"\t\t\t"'<FLocat xlink:href="'${SINGLE_FLOCAT}'.corrupted" size="'$archivedsize'" lastModified="'$archivedlastmod'">'
+FLOCATLIST=$FLOCATLIST"\n\t\t\t\t"'<checksum type="'$CHECKSUMTYPE'" expectedvalue="'$temp_chsum_source'" value="'$temp_chsum_saved'" lastChecked="'$checktime'" match="false"/>'
+#	Error rising switches
 MATCH_RESULT="false"
 checkmatchok="N"
-#	alzo gravita' a "error"
 MANAGE_STATUS="ERR"
-#	Alzo il flag che a fine lavoro mi fara' mettere il taskid in fallout
-CHECKSUM_PASSED="N"
+CHECKSUM_PASSED=false
 }
 
 #-----------------------------------------------------------
 function unverified_checksum()
 {
-#	2) Editare nei file di output il nome del file appendendo .unverified
 mv "$archfile" "$archfile.unverified"
-sed -e 's;'"$SINGLE_FLOCAT"';'"$SINGLE_FLOCAT.unverified"';' -i $JsonOutput 
-sed -e 's;'"$SINGLE_FLOCAT"';'"$SINGLE_FLOCAT.unverified"';' -i $XmlOutput
-#	json
-echo '"checksum":{"type":"'$CHECKSUMTYPE'","expectedvalue":"'$temp_chsum_source'","value":"'$temp_chsum_saved'","match":"true"}}' >> $JsonOutput
-#	xml
-echo -e "\t\t"'<checksum type="'$CHECKSUMTYPE'" expectedvalue="'$temp_chsum_source'" value="'$temp_chsum_saved'" match="true"/>' >> $XmlOutput
-#	4) appendere .unverified al flocat che eventualmente vado a salvare con "salva_checksum"
+#	FLOCATLIST feed
+FLOCATLIST=$FLOCATLIST"\t\t\t"'<FLocat xlink:href="'${SINGLE_FLOCAT}'.unverified" size="'$archivedsize'" lastModified="'$archivedlastmod'">'
+FLOCATLIST=$FLOCATLIST"\n\t\t\t\t"'<checksum type="'$CHECKSUMTYPE'" value="'$temp_chsum_saved'"/>'
+#	Warning rising switches
 checkmatchok="U"
 }

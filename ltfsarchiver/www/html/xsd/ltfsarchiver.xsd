@@ -1,0 +1,250 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- edited with XMLSpy v2007 rel. 3 (http://www.altova.com) by BOCH LAURENT (RAI TELEVISIONE ITALIANA SPA) -->
+<xsd:schema xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:xlink="http://www.w3.org/1999/xlink" elementFormDefault="qualified" attributeFormDefault="unqualified" version="2013-12-09T15:00:00">
+	<xsd:import namespace="http://www.w3.org/1999/xlink" schemaLocation="http://www.loc.gov/standards/xlink/xlink.xsd"/>
+	<xsd:attributeGroup name="basicReplyAttrs">
+		<xsd:attribute name="exit_code" type="xsd:integer" use="required"/>
+		<xsd:attribute name="exit_string" type="xsd:string" use="required"/>
+	</xsd:attributeGroup>
+	<xsd:simpleType name="serviceType">
+		<xsd:annotation>
+			<xsd:documentation>This is the list of services composing the API</xsd:documentation>
+		</xsd:annotation>
+		<xsd:restriction base="xsd:string">
+			<xsd:enumeration value="AddTape"/>
+			<xsd:enumeration value="CancelTask"/>
+			<xsd:enumeration value="Checksum"/>
+			<xsd:enumeration value="GetResult"/>
+			<xsd:enumeration value="GetStatus"/>
+			<xsd:enumeration value="ListTape"/>
+			<xsd:enumeration value="MakeAvailableMount"/>
+			<xsd:enumeration value="MakeAvailableUnmount"/>
+			<xsd:enumeration value="ManualLoadConfirm"/>
+			<xsd:enumeration value="ManualLoadQuery"/>
+			<xsd:enumeration value="QueryDevices"/>
+			<xsd:enumeration value="QueryTapes"/>
+			<xsd:enumeration value="QueryTasks"/>
+			<xsd:enumeration value="RestoreFromLTO"/>
+			<xsd:enumeration value="ResubmitTask"/>
+			<xsd:enumeration value="WithdrawTape"/>
+			<xsd:enumeration value="WriteToLTO"/>
+		</xsd:restriction>
+	</xsd:simpleType>
+	<xsd:complexType name="checksumType">
+		<xsd:complexContent>
+			<xsd:extension base="ltfsaType">
+				<xsd:attribute name="type" use="required">
+					<xsd:annotation>
+						<xsd:documentation>may be enumeration or not (TBC)</xsd:documentation>
+					</xsd:annotation>
+					<xsd:simpleType>
+						<xsd:restriction base="xsd:string">
+							<xsd:enumeration value="MD5"/>
+							<xsd:enumeration value="SHA1"/>
+						</xsd:restriction>
+					</xsd:simpleType>
+				</xsd:attribute>
+				<xsd:attribute name="expectedvalue" type="xsd:string"/>
+				<xsd:attribute name="value" type="xsd:string" use="required"/>
+				<xsd:attribute name="lastChecked" type="xsd:dateTime" />
+				<xsd:attribute name="match" type="xsd:boolean"/>
+			</xsd:extension>
+		</xsd:complexContent>
+	</xsd:complexType>
+	<xsd:complexType name="deviceType" abstract="true">
+		<xsd:attribute name="device" type="xsd:string" use="required"/>
+		<xsd:attribute name="use" type="xsd:boolean" default="true"/>
+	</xsd:complexType>
+	<xsd:complexType name="driveType">
+		<xsd:complexContent>
+			<xsd:extension base="deviceType">
+				<xsd:attribute name="tapeID" type="xsd:string"/>
+			</xsd:extension>
+		</xsd:complexContent>
+	</xsd:complexType>
+	<xsd:complexType name="FLocatType">
+		<xsd:complexContent>
+			<xsd:extension base="ltfsaType">
+				<xsd:sequence>
+					<xsd:element name="checksum" type="checksumType" minOccurs="0" maxOccurs="2"/>
+				</xsd:sequence>
+				<xsd:attribute ref="xlink:href" use="required"/>
+				<xsd:attribute name="size" type="xsd:nonNegativeInteger">
+					<xsd:annotation>
+						<xsd:documentation>size of file in bytes. Directories have 0 bytes</xsd:documentation>
+					</xsd:annotation>
+				</xsd:attribute>
+				<xsd:attribute name="lastModified" type="xsd:dateTime">
+					<xsd:annotation>
+						<xsd:documentation>source change time preserved in archiving</xsd:documentation>
+					</xsd:annotation>
+				</xsd:attribute>
+			</xsd:extension>
+		</xsd:complexContent>
+	</xsd:complexType>
+	<xsd:complexType name="ltfsaType" abstract="true">
+		<xsd:attribute name="ltfsaVersion" type="xsd:string"/>
+	</xsd:complexType>
+	<xsd:complexType name="libraryType">
+		<xsd:complexContent>
+			<xsd:extension base="deviceType">
+				<xsd:sequence>
+					<xsd:element name="Drive" type="driveType" minOccurs="0" maxOccurs="unbounded"/>
+				</xsd:sequence>
+			</xsd:extension>
+		</xsd:complexContent>
+	</xsd:complexType>
+	<xsd:complexType name="manualLoadType">
+		<xsd:attribute name="taskID" type="xsd:string" use="required"/>
+		<xsd:attribute name="tapeID" type="xsd:string" use="required"/>
+		<xsd:attribute name="device" type="xsd:string" use="required"/>
+	</xsd:complexType>
+	<xsd:complexType name="mountType">
+		<xsd:attribute name="device" type="xsd:string" use="required"/>
+		<xsd:attribute name="path" type="xsd:string"/>
+		<xsd:attribute name="readonly" type="xsd:boolean" default="false"/>
+	</xsd:complexType>
+	<xsd:complexType name="parameterType">
+		<xsd:attribute name="name" type="xsd:string" use="required"/>
+		<xsd:attribute name="value" type="xsd:string" use="required"/>
+		<xsd:attribute name="assignedByDefault" type="xsd:boolean" default="false"/>
+	</xsd:complexType>
+	<xsd:complexType name="poolType">
+		<xsd:sequence>
+			<xsd:element name="Tape" type="tapeType" maxOccurs="unbounded"/>
+		</xsd:sequence>
+		<xsd:attribute name="poolName" type="xsd:string" use="required"/>
+		<xsd:attribute name="numTapes" type="xsd:nonNegativeInteger"/>
+		<xsd:attribute name="totalSizeMB" type="xsd:nonNegativeInteger"/>
+		<xsd:attribute name="totalFreeMB" type="xsd:nonNegativeInteger"/>
+		<xsd:attribute name="minimumFreeMB" type="xsd:nonNegativeInteger"/>
+		<xsd:attribute name="maximumFreeMB" type="xsd:nonNegativeInteger"/>
+	</xsd:complexType>
+	<xsd:complexType name="requestType">
+		<xsd:sequence>
+			<xsd:element name="Parameter" type="parameterType" minOccurs="0" maxOccurs="unbounded"/>
+		</xsd:sequence>
+		<xsd:attribute name="service" type="serviceType" use="required"/>
+		<xsd:attribute name="time" type="xsd:dateTime" use="required"/>
+	</xsd:complexType>
+	<xsd:complexType name="resultType">
+		<xsd:sequence>
+			<xsd:element name="Report" type="xsd:string" minOccurs="0"/>
+			<xsd:element name="FLocat" type="FLocatType" minOccurs="0" maxOccurs="unbounded"/>
+			<xsd:element name="Mount" type="mountType" minOccurs="0"/>
+		</xsd:sequence>
+		<xsd:attributeGroup ref="basicReplyAttrs"/>
+		<!--xsd:attribute name="taskID" type="xsd:string" use="required"/-->
+	</xsd:complexType>
+	<xsd:complexType name="tapeType">
+		<xsd:sequence>
+			<xsd:element name="Mount" type="mountType" minOccurs="0"/>
+			<xsd:element name="MountPending" minOccurs="0" maxOccurs="unbounded">
+				<xsd:complexType>
+					<xsd:attribute name="taskID" use="required"/>
+				</xsd:complexType>
+			</xsd:element>
+		</xsd:sequence>
+		<xsd:attribute name="tapeID" type="xsd:string" use="required"/>
+		<xsd:attribute name="sizeMB" type="xsd:nonNegativeInteger" use="required"/>
+		<xsd:attribute name="freeMB" type="xsd:nonNegativeInteger" use="required"/>
+		<xsd:attribute name="ltotype" use="required">
+			<xsd:simpleType>
+				<xsd:restriction base="xsd:string">
+					<xsd:enumeration value="LTO5"/>
+					<xsd:enumeration value="LTO6"/>
+					<xsd:enumeration value="LTO7"/>
+					<xsd:enumeration value="LTO8"/>
+					<xsd:enumeration value="LTO9"/>
+				</xsd:restriction>
+			</xsd:simpleType>
+		</xsd:attribute>
+		<xsd:attribute name="writeEnable" type="xsd:boolean" default="true"/>
+		<xsd:attribute name="status">
+			<xsd:simpleType>
+				<xsd:restriction base="xsd:string">
+					<xsd:enumeration value="idle"/>
+					<xsd:enumeration value="busy for writing"/>
+					<xsd:enumeration value="busy for reading"/>
+					<xsd:enumeration value="busy for make available"/>
+				</xsd:restriction>
+			</xsd:simpleType>
+		</xsd:attribute>
+		<xsd:attribute name="lastModified" type="xsd:dateTime"/>
+	</xsd:complexType>
+	<xsd:complexType name="taskType">
+		<xsd:sequence>
+			<xsd:element name="Request" type="requestType" minOccurs="0"/>
+		</xsd:sequence>
+		<xsd:attribute name="id" type="xsd:string" use="required"/>
+		<xsd:attribute name="status" use="required">
+			<xsd:simpleType>
+				<xsd:restriction base="xsd:string">
+					<xsd:enumeration value="waiting"/>
+					<xsd:enumeration value="starting"/>
+					<xsd:enumeration value="running"/>
+					<xsd:enumeration value="completed"/>
+					<xsd:enumeration value="fallout"/>
+				</xsd:restriction>
+			</xsd:simpleType>
+		</xsd:attribute>
+		<xsd:attribute name="substatus" type="xsd:string"/>
+		<xsd:attribute name="timestart" type="xsd:dateTime"/>
+		<xsd:attribute name="timeend" type="xsd:dateTime">
+			<xsd:annotation>
+				<xsd:documentation>if task is not complete and the attribute is givent, it must be meant as "estimated time of arrival"</xsd:documentation>
+			</xsd:annotation>
+		</xsd:attribute>
+		<xsd:attribute name="percentage">
+			<xsd:simpleType>
+				<xsd:restriction base="xsd:decimal">
+					<xsd:minInclusive value="0"/>
+					<xsd:maxInclusive value="100"/>
+				</xsd:restriction>
+			</xsd:simpleType>
+		</xsd:attribute>
+		<xsd:attribute name="tapeID" type="xsd:string"/>
+	</xsd:complexType>
+	<xsd:element name="LTFSArchiver">
+		<xsd:annotation>
+			<xsd:documentation>Root element of LTFSArchiver API</xsd:documentation>
+		</xsd:annotation>
+		<xsd:complexType>
+			<xsd:complexContent>
+				<xsd:extension base="ltfsaType">
+					<xsd:sequence>
+						<xsd:element name="ReceivedRequest" type="requestType" minOccurs="0"/>
+						<xsd:element name="Response" minOccurs="0">
+							<xsd:complexType>
+								<xsd:simpleContent>
+									<xsd:extension base="xsd:string">
+										<xsd:attributeGroup ref="basicReplyAttrs"/>
+										<xsd:attribute name="timenow" type="xsd:dateTime"/>
+									</xsd:extension>
+								</xsd:simpleContent>
+							</xsd:complexType>
+						</xsd:element>
+						<xsd:element name="Output" minOccurs="0">
+							<xsd:complexType>
+								<xsd:complexContent>
+									<xsd:extension base="ltfsaType">
+										<xsd:choice minOccurs="0">
+											<xsd:element name="Result" type="resultType"/>
+											<xsd:element name="Task" type="taskType" maxOccurs="unbounded"/>
+											<xsd:element name="Pool" type="poolType" maxOccurs="unbounded"/>
+											<xsd:choice maxOccurs="unbounded">
+												<xsd:element name="Library" type="libraryType"/>
+												<xsd:element name="Drive" type="driveType"/>
+											</xsd:choice>
+											<xsd:element name="ManualLoad" type="manualLoadType" maxOccurs="unbounded"/>
+										</xsd:choice>
+									</xsd:extension>
+								</xsd:complexContent>
+							</xsd:complexType>
+						</xsd:element>
+					</xsd:sequence>
+				</xsd:extension>
+			</xsd:complexContent>
+		</xsd:complexType>
+	</xsd:element>
+</xsd:schema>

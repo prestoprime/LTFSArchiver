@@ -21,13 +21,24 @@
 function Verify_CheckFile()
 {
 CHKSMFILE=$( get_parameter ChecksumFile )
+#	Check if file exists
 if ! [ -f $CHKSMFILE ]; then
         exitcode="400"; message="ChecksumFile supplied: $CHKSMFILE not found"
         FILEPASS="N"
 else
+	#	Check if file has #CHECKSUMTYPE in the first lin
         case `head -1 $CHKSMFILE | sed -e 's/^#//'` in
                 "MD5"|"SHA1")
-                        FILEPASS="Y"
+			#	Check if all aother lines have FLOCATS (filepaths non allowed)
+			#	count items lines:
+			FILECOUNT=`grep -cv ^# $CHKSMFILE`
+			FLOCCOUNT=`grep -v ^# $CHKSMFILE | grep -c "${filesrc}"`
+			if [ $FILECOUNT == $FLOCCOUNT ]; then
+	                        FILEPASS="Y"
+			else
+				exitcode="400"; message="Invalid checksum content"
+				FILEPASS="N"
+			fi
                 ;;
                 *)
                         exitcode="400"; message="Invalid checksum type supplied: "`head -1 $CHKSMFILE | sed -e 's/^#//'`
@@ -37,12 +48,11 @@ else
 fi
 }
 
-function insert_write()
+function insert_checksum()
 {
 callingtime=`date '+%Y-%m-%d %H:%M:%S'`
-#	's/^\/*//'`
-$CMD_DB "INSERT INTO requests ( uuid,status,substatus,manager,operation,sourcefile,callingtime, poolname, datatype, checksum,checksumfile) \
-	VALUES ( '$taskid','waiting',0,'$LTFSARCHIVER_MODE','W','$filesrc','$callingtime','$poolname','$itemtype','$ask4checksum','$checksumfile')" > /dev/null 2>&1
+$CMD_DB "INSERT INTO requests ( uuid,status,substatus,manager,operation,sourcefile,callingtime, checksum, checksumfile,ltotape) \
+	VALUES ( '$taskid','waiting',0,'$LTFSARCHIVER_MODE','V','$filesrc','$callingtime','$ask4checksum','$checksumfile','${FLO_PARTS[1]}')" > /dev/null 2>&1
 RC=$?
 }
 
@@ -53,7 +63,7 @@ RC=$?
 command=`basename $0`
 PARM=$QUERY_STRING
 RECEIVEDTIME=`date +'%Y-%m-%dT%H:%M:%S'`
-VALIDPARMS="PoolName|Checksum|ChecksumFile|FileName|FromGUI|Output"
+VALIDPARMS="Checksum|ChecksumFile|FileName|FromGUI|Output"
 
 
 output=$( get_parameter Output )
@@ -61,7 +71,7 @@ normalize_output
 get_supplied_parameters
 poolname=$( get_parameter PoolName )		#	PoolName
 ask4checksum=$( get_parameter Checksum )	#	Tipo di checksum richiesto
-filesrc=$( get_parameter FileName )		#	Nome del file o del folder da archiviare
+filesrc=$( get_parameter FileName )		#	FLocat da lavorare
 checksumfile=$( get_parameter ChecksumFile )	#	File con checksum precalcolati
 guicall=$( get_parameter FromGUI )		#	true (da parametro nascosto) se arriva da pagina web
 insert_substatus=0
@@ -71,12 +81,8 @@ if [ -z $output ]; then
 	PARM=$PARM'&Output='$output
 fi
 #	Eventuali default
-if [ -z $poolname ]; then
-	poolname=$LTFSARCHIVER_DEFPOOL
-	PARM=$PARM'&PoolName='$poolname
-fi
 if [ -z $ask4checksum ]; then
-	ask4checksum="N"
+	ask4checksum="auto"
 	PARM=$PARM'&Checksum='$ask4checksum
 fi
 [ -z $guicall ] && guicall=false
@@ -84,13 +90,12 @@ if ! [ -z "$BADPARMS" ]; then
         exitcode="400"; message="${BADPARMS}"
 	test_passed=false
 fi
-#	il substatus iniziale e' 0 di default, diventera' -10 se viene chiesto il checksum file-based
 #==================================================================================
 [ -z $guicall ] && guicall=false
 if $test_passed; then
 	#	C'e' un valore non valido in Checksum - stampo ed esco
 	case $ask4checksum in
-		"MD5"|"MD5_both"|"SHA1"|"SHA1_both"|"FILE"|"N")
+		"MD5"|"SHA1"|"FILE"|"auto")
 		;;
 		*)
 			exitcode='400';	message='Invalid Checksum value supplied'
@@ -112,31 +117,33 @@ if $test_passed ; then
 		test_passed=false
 	fi
 fi
-if $test_passed; then
-	esiste=`$CMD_DB "SELECT count (*) FROM lto_info WHERE poolname = '$poolname';" | sed -e 's/^\ //' -e 's/\ $//' | head -1`
-	if [ $esiste == 0 ]; then
-		exitcode='400'; message='Invalid PoolName supplied'
-		test_passed=false
-	fi
-fi
+#       Check FileName
 if $test_passed ; then
-	#	remove undesired leading multiple slashes
-	filesrc=`echo $filesrc | sed 's;^\/*;\/;'`
-	if [ -z "$filesrc" ]; then
-		exitcode='400';	message='FileName not supplied'
-		test_passed=false
+	if  [ -z "$filesrc" ]; then
+		exitcode="400";message="Empty FileName supplied "; test_passed=false
 	else
-		if ( [ -f "$filesrc" ] || [ -d "$filesrc" ] ); then
-			[ -f "$filesrc" ] && itemtype="F"
-			[ -d "$filesrc" ] && itemtype="D"
-			#	se directory elimino eventuale "/" in coda
-			[ $itemtype == "D" ] && filesrc=`echo "$filesrc" | sed -e 's;\/$;;'`
+		#       sintassi flocat
+		FLO_PARTS=( `echo $filesrc | tr ':' ' '` )
+		if [ ${#FLO_PARTS[@]} -ne 3 ]; then
+			exitcode="400"; message="Invalid flocat syntax"; test_passed=false
 		else
-			exitcode='400'; message="$filesrc"' not found'
-			test_passed=false
+			if ! [ ${FLO_PARTS[0]} == "lto-ltfs" ]; then
+				exitcode="400"; message="Invalid flocat type"; test_passed=false
+			else
+				if $( validate_uuid ${FLO_PARTS[2]} ); then
+					cercatape ${FLO_PARTS[1]}
+					if [ $trovato == 0 ]; then
+						exitcode="400"; message="Tape referred by flocat (${FLO_PARTS[1]}) not found"
+						test_passed=false
+					fi
+				else
+					exitcode="400"; message="Invalid flocat"; test_passed=false
+				fi
+			fi
 		fi
 	fi
 fi
+#	Verify that Checksum file has a valid form
 if $test_passed; then
 	if [ "$ask4checksum" == "FILE" ]; then
 		Verify_CheckFile
@@ -150,7 +157,7 @@ fi
 if $test_passed; then
 	taskid=`uuidgen`
 	#	Insert DB
-	insert_write
+	insert_checksum
 	if [ $RC == 0 ]; then
 		#	restituisco dati
 		exitcode="200"

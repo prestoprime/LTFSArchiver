@@ -1,5 +1,5 @@
 # PrestoPRIME  LTFSArchiver
-#  Version: 0.9 Beta
+#  Version: 1.1
 #  Authors: L. Savio, L. Boch, R. Borgotallo
 #
 #  Copyritght (C) 2011-2012 RAI – Radiotelevisione Italiana <cr_segreteria@rai.it>
@@ -24,8 +24,13 @@ Please follow these steps:
 0) Be root:
    su -
 
-1) Unpack the tar archive:
-   tar -xvzf PrestoPRIME_LTFSArchiver_<ver>.tar.gz -C /
+1) Choose the idestination directory wher to install LTFSArchiver
+   (a ltfsarchiver subdirectory will be created into it)
+   Usually /opt is used, and /opt/ltfsarchiver directory will contain all files
+   /opt/ltfsarchiver will be now identified as LTFSARCHIVER_HOME
+
+2) Unpack the tar archive:
+   i.e.: tar -xvzf PrestoPRIME_LTFSArchiver_<ver>.tar.gz -C /opt
    This will put all the files in the correct place on the FS
 
 Now you can choose between to perform a manual or automatic setup process.
@@ -43,31 +48,48 @@ Now you can choose between to perform a manual or automatic setup process.
 4) Create the LTFSArchive database with this sequence of commands:
    su - pprime
    createdb ltfsarchiver
-   psql -U pprime ltfsarchiver -f /opt/ltfsarchiver/sbin/utils/DB_pprimelto_schema.sql
+   psql -U pprime ltfsarchiver -f /INSTALL_DIR/sbin/utils/DB_pprimelto_schema.sql
    exit (back to be root)
 
 5) Check and eventually modify the main configuration file:
-   /opt/ltfsarchiver/ltfsarchiver.conf
+   /INSTALL_DIR/conf/ltfsarchiver.conf
    to reflect the actual system needs and configuration
 
 6) Check the device configuration (libraries and lto units) using the
-   "guessconfig script": /opt/ltfsarchiver/sbin/utils/guess_conf.sh
+   "guessconfig script": /INSTALL_DIR/sbin/utils/guess_conf.sh
    the script will check and (if needed and approved) override the base
    configuration
 
-7) Add the ltfsarchive service to the startup manager, using the command:
+7) Create a startup script in /etc/init.d directory
+   Both CentOS/Ubuntu sample files are available in /INSTALL_DIR/specific:
+   - ltfsarchiver.centos
+   - ltfsarchiver.ubuntu
+   change _LTFSARCHIVER_HOME_ with the real home directory
+   Finally add the ltfsarchive service to the startup manager, using the command:
    update-rc.d ltfsarchiver start 90 3 5 . stop 90 0 1 2 4 6 . (Ubuntu)
    chkconfig --add ltfsarchiver start 90 3 5 (CentOS)
 
-8) Launch the LTFSArchive service:
+8) Create a .conf file to make httpd able to know where LTFSArchiver is.
+   A sample file (/INSTALL_DIR/specific/ltfsarchiver.conf) is available
+   change _LTFSARCHIVER_HOME_ with the real home directory
+   restart httpd service:
+   /etc/init.d/apache restart (Ubuntu)
+   /etc/init.d/httpd restart (CentOS)
+
+8) Create a script in /etc/cron.daily to enable log/db/report cleaning
+   A sample file (/INSTALL_DIR/specific/ltfsarchiver.cron.daily) is available
+   change _LTFSARCHIVER_HOME_ with the real home directory
+
+10) Launch the LTFSArchive service:
    /etc/init.d/ltfsarchiver start
 
 --- Automatic setup
 
-Launch the script /opt/ltfsarchiver/sbin/utils/install.sh
-The script will perfrom all of the described steps except steps 5) and 8);
+Launch the script /INSTALL_DIR/sbin/utils/install.sh
+The script will perform all of the described steps except steps 5) and 10);
+
 Step 6) will be performed only if you answer "Y" to the related prompt.
 
 
 Note: Refer to the documentation to understand the meaning of variables in
-  /opt/ltfsarchiver/ltfsarchiver.conf file
+  /INSTALL_DIR/conf/ltfsarchiver.conf file

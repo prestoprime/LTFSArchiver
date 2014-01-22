@@ -1,7 +1,7 @@
 #!/bin/bash
 
 #  PrestoPRIME  LTFSArchiver
-#  Version: 1.0 Beta
+#  Version: 1.1
 #  Authors: L. Savio, L. Boch, R. Borgotallo
 #
 #  Copyritght (C) 2011-2012 RAI – Radiotelevisione Italiana <cr_segreteria@rai.it>
@@ -25,12 +25,12 @@
 #=================================================================================================
 function free_resources_and_exit ()
 {
-#       sblocco il device
+#       free device
 $CMD_DB" delete from lock_table where device='${WORKING_PARMS[4]}'" > /dev/null 2>&1
-#	sblocco il nastro
+#	free tape
 $CMD_DB" update lto_info set inuse=NULL where label='${WORKING_PARMS[3]}'" > /dev/null 2>&1
 bkpltoinfo
-#	rimuovo lock
+#	remove lockfile
 rm /tmp/ltfsarchiver.tape_agent.$$.lock
 main_logger 0 "------------> Completed"
 exit
@@ -38,25 +38,26 @@ exit
 #=================================================================================================
 #	MAIN MAIN MAIN
 #=================================================================================================
-#	Inizializzazione
+#	Initializing files, devices, device type
 CFG_FILE=`dirname $0`/../conf/ltfsarchiver.conf
 if [ -f $CFG_FILE ]; then
 	. $CFG_FILE
-	#	funzioni comuni
+	#	include common functions
 	. $LTFSARCHIVER_HOME/sbin/common.sh
 	MAIN_LOG_FILE=$LTFSARCHIVER_LOGDIR/`basename $0`_`date +%s`.log
 	MAIN_LOG_ERR=$LTFSARCHIVER_LOGDIR/`basename $MAIN_LOG_FILE .log`.err
 	main_logger 0 "------------> Starting..."
 	main_logger 4 "logfile: $MAIN_LOG_FILE"
-	#	POSTGRES STA GIRANDO?
+	#	Check if postgresql is running
 	service postgresql status >/dev/null 2>&1
 	PSQL_RUN=$?
 	if [ $PSQL_RUN -gt 0 ]; then
 		main_logger 0 "Postgresql is inactive..."
 		exit 3
 	fi
-	#	Modaliata operativa
-	#	controllo solo se diverso da MANUAL
+	#	include tape functions
+	. $LTFSARCHIVER_HOME/sbin/utils/mediamove.sh
+	#	include tapelibrary functions
 	case $HW_CHANGER_TYPE in
        		"MSL")
 		       	. $LTFSARCHIVER_HOME/sbin/utils/msl_util.sh
@@ -67,7 +68,7 @@ if [ -f $CFG_FILE ]; then
 		       	exit 3
 	       	;;
 	esac
-	#	funzioni per tape
+	#	include tape type functions
 	case $HW_TAPE_TYPE in
 		"LTO")
 			. $LTFSARCHIVER_HOME/sbin/utils/lto_util.sh
@@ -78,30 +79,28 @@ if [ -f $CFG_FILE ]; then
 			exit 3
 		;;
 	esac
-	#	funzioni movimento nastri
-	if [ $LTFSARCHIVER_MODE != "M" ]; then
-		. $LTFSARCHIVER_HOME/sbin/utils/mediamove.sh
-	fi
+	#	ok, ready, set lock
 	touch /tmp/ltfsarchiver.tape_agent.$$.lock
 else
 	echo "missing cfg file"
 	exit 1
 fi
-#	Carico cfg librerie/tape
-devices_config 0        #       $1 = 0 non fa stampare output
+#	load tape config (0: don't print output)
+devices_config 0
 ###############################################################################################
+#	Read variables and creates an array of taskID's
 OPERATION_UUIDS=( $@ )
-#	Uso la prima uuid per sapere:
-#	cosa fare (operation)
-#	come fare (manager)
-#	su cosa operare (ltodevice)
-#	se smontare il nastro o no alla fine (makeaval->no)
-#	label lto
+#	All TaskID are of the same type and operates on the same device, so I use the first (or olnly) one to
+#	-	Get the operation type
+#	-	How to operate (manual or library)
+#	-	Get the tape label
+#	-	Where to operate (device)
+#	-	Unmount tape or not when operation is completed
 WORKING_PARMS=( `$CMD_DB "select operation,manager,ltolibrary,ltotape,device from requests where uuid='${OPERATION_UUIDS[0]}';" | tr -d ' ' | tr '|' ' '` ) 
-#	[0]=operazione
+#	[0]=operation
 #	[1]=manager
-#	[2]=libreria
-#	[3]=label
+#	[2]=librery
+#	[3]=ltolabel
 #	[4]=tapedevice
 #-------------------
 #       Mount point:
@@ -110,60 +109,61 @@ if [ ${WORKING_PARMS[0]} == "A" ]; then
 else
         MOUNT_POINT=/mnt/ltfs`basename ${WORKING_PARMS[4]}`
 fi
-#	Se manager e' il robot, devo fare il load
-#if [ ${WORKING_PARMS[1]} == "C" ]; then
-	#       Mount del nastro (passo devname libreria - devname driver - label): solo se assegnato a Changer
-	main_logger 2 "Loading/checking tape ${WORKING_PARMS[3]} into driver ${WORKING_PARMS[4]}"
-	load_tape ${WORKING_PARMS[2]}  ${WORKING_PARMS[4]}  ${WORKING_PARMS[3]}
-	main_logger 4 "LOAD_OK returned value: $LOAD_OK"
-	#       Se ok, faccio forward a stato=40
-	#       Se non ok, faccio fallout
-	for ((idx=0; idx< ${#OPERATION_UUIDS[@]}; idx++)); do
-		if [ $LOAD_OK == "Y" ]; then
-			update_uuid_status ${OPERATION_UUIDS[$idx]} 40
-		else	
-			main_logger 0  ${OPERATION_UUIDS[$idx]}
-			fallout_uuid ${OPERATION_UUIDS[$idx]} $FALLOUT_CODE
-		fi
-	done
-#else 
-#	LOAD_OK="Y"	#	Caricato manualmente (si suppone che sia stato inserito... :-))
-#fi
-#	Se non ho ricevuto OK dal load, libero le risorse ed esco
-if [ $LOAD_OK != "Y" ]; then
-	#	Se format/check rimuovo anche da lto_info
-	case ${WORKING_PARMS[0]} in
-		"Z"|"F"|"C")
-			$CMD_DB" delete from lto_info where label='${WORKING_PARMS[3]}';" > /dev/null 2>&1
-			bkpltoinfo
-		;;
-	esac
-	#	Azzero lo spazio prenotato
-	$CMD_DB" update lto_info set booked=0 where label='${WORKING_PARMS[3]}';" > /dev/null 2>&1
-	free_resources_and_exit
-fi
-#	Avanzamento
+######################################################################################################
+#	Tape mount (library devname - driver devname - label)
+#	NOTE: Load tape ALWAYS RETURN "Y" if NOT LIBRARY managed
+#		It is supposed that human operator ha actually inserted required tape
+main_logger 2 "Loading/checking tape ${WORKING_PARMS[3]} into driver ${WORKING_PARMS[4]}"
+load_tape ${WORKING_PARMS[2]}  ${WORKING_PARMS[4]}  ${WORKING_PARMS[3]}
+main_logger 4 "LOAD_OK returned value: $LOAD_OK"
+#       If ok, forward to stato=40
+#       Otherwise, fallout
+for ((idx=0; idx< ${#OPERATION_UUIDS[@]}; idx++)); do
+	if [ $LOAD_OK == "Y" ]; then
+		update_uuid_status ${OPERATION_UUIDS[$idx]} 40
+	else	
+		main_logger 0  ${OPERATION_UUIDS[$idx]}
+		fallout_uuid ${OPERATION_UUIDS[$idx]} $FALLOUT_CODE
+		create_fallout_report ${OPERATION_UUIDS[$idx]} ${WORKING_PARMS[0]}
+		#	whan in fallout, maybe I have to do something more:
+		case ${WORKING_PARMS[0]} in
+			"Z"|"F"|"C")	#       AddTape: remove from lto_info
+				$CMD_DB" delete from lto_info where label='${WORKING_PARMS[3]}';" > /dev/null 2>&1
+				bkpltoinfo
+			;;
+			"W")		#	WriteToLto: set booked space to zero
+				$CMD_DB" update lto_info set booked=0 where label='${WORKING_PARMS[3]}';" > /dev/null 2>&1
+			;;
+		esac
+		#	Free allocated resources (tape and device) and exit
+		free_resources_and_exit
+	fi
+done
+######################################################################################################
+#	Tape loaded... now it has to be mounted or initialized
 #	Per Format / CheckSpace / Makeavailable passo in running l'istanza (che e' sempre unica)
 case ${WORKING_PARMS[0]} in
-	"Z"|"F"|"C")
-		#	Avanzo lo stato a 50
+	"Z"|"F"|"C")	#	AddTape (FORMAT)
+		#	Forward status to running
 		update_uuid_status ${OPERATION_UUIDS[0]} 50
-		#	"facciamo finta" che sia formattato
+		#	#	Optimistic vision: mklts will run succesfully
 		MKLTFSRC=0
-		#	Se F o Z prima formatto
-		FORCE=" "	#	No force
+		#	if FORCE or FORMAT.. let's create LTFS with or without force
+		FORCE=" "
 		if ( [ ${WORKING_PARMS[0]} == "F" ] || [ ${WORKING_PARMS[0]} == "Z" ] ); then
 			[ ${WORKING_PARMS[0]} == "Z" ] && FORCE=" --force "		#OK, force
-			#	Cerco il backend da usare
+			#	look for right backend value
 			for ((BIDX=0;BIDX<${#CONF_BACKENDS[@]};BIDX+=2)); do
 				if [ ${CONF_BACKENDS[$BIDX]} == ${WORKING_PARMS[4]} ]; then
 					TAPE_BACKEND=${CONF_BACKENDS[$BIDX+1]}
 				fi
 			done
+			#	Start mkltfs
 			FORMAT_COMMAND="$CMD_MKLTFS $FORCE --device=${WORKING_PARMS[4]} --backend=$TAPE_BACKEND --no-compression  --volume-name=${WORKING_PARMS[3]} "$( get_format_rules )
 			main_logger 1 "Tape will be formatted with the following command:"
 			main_logger 1 $FORMAT_COMMAND
 			$FORMAT_COMMAND >> $MAIN_LOG_FILE 2>&1
+			#	Return code?
 			MKLTFSRC=$?
 			main_logger 5 "MKLTFSRC returned value: $MKLTFSRC"
 			if [ $MKLTFSRC == 0 ]; then
@@ -172,117 +172,163 @@ case ${WORKING_PARMS[0]} in
 				main_logger 0 "ERROR while formatting tape ${WORKING_PARMS[3]}"
 			fi
 		fi
-		#	Adesso lo monto in r/w
+		#	If mklts was succesful, mount it in rw
+		#	Otherwise send task in fallout status
 		if [ $MKLTFSRC == 0 ]; then
 			mount_ltfs ${WORKING_PARMS[4]} ${WORKING_PARMS[3]} "rw" $MOUNT_POINT "N"
-			#	Aggiorno LTOtype
+			#	update ltotype into lto_info
 			$CMD_DB " update lto_info set ltotype='$TAPE_STATUS_TYPE' where label='${WORKING_PARMS[3]}';" > /dev/null 2>&1 
 		else
 			fallout_uuid ${OPERATION_UUIDS[0]} 501
-			LTFS_RC=32	#	Mi serve per skippare il mount
-			#	Rimuovo nastro altrimenti non accetterebbe un nuovoinserimento
+			create_fallout_report ${OPERATION_UUIDS[0]} ${WORKING_PARMS[0]}
+			#	Set RC value to 32 (it will be used later)
+			LTFS_RC=32	#	
+			#	Remove tape from lto_info, so it can be further reinserted
 			$CMD_DB " delete from lto_info where label='${WORKING_PARMS[3]}';" > /dev/null 2>&1
 			bkpltoinfo
 		fi
 	;;
-	"R"|"A")
-		#	Per MAKEAVAL avanzo status a 50 - per ARCHIVE avanzero' uuid per uuid
+	"R"|"A"|"L")	#	Restore / MakeavailableMount / ListTape (mount readonly)
+		#	if it is a MakeavailableMount request the task is forwarded to running
+		#	Other tasks will be forwarded one by one by the specific batch
 		[ ${WORKING_PARMS[0]} == "A" ] && update_uuid_status ${OPERATION_UUIDS[0]} 50
+		#	MOUNT
 		mount_ltfs ${WORKING_PARMS[4]} ${WORKING_PARMS[3]} "ro" $MOUNT_POINT "Y"
 	;;
-	"W")
+	"W"|"V")	#	WriteToLTO / Checksum
+		#	Tasks will be forwarded one by one by the specific batch
+		#	MOUNT
 		mount_ltfs ${WORKING_PARMS[4]} ${WORKING_PARMS[3]} "rw" $MOUNT_POINT "Y"
 	;;
 esac
-#	OK, vediamo come e' andato il mount ltfs
+#	Check the Return code from mount command
 main_logger 4 "LTFS_RC returned value: $LTFS_RC"
 if [ $LTFS_RC == 0 ];then
-	#	Se il mount e' finito bene...
-	#	Faccio	partire lo script che lavora istanza/e /W/R) o chiudo qui (C/F/A)
+	#	Mount succesful
+	#	Choose what to do according to operation type
 	case ${WORKING_PARMS[0]} in
-		"Z"|"F"|"C")
+		"Z"|"F"|"C")		#	AddTape -> Write label file -> Unmount -> End
 			main_logger 1 "File systeam is ready in R/W; writing label"
-			#	Scrivo la label
 			touch $MOUNT_POINT/${WORKING_PARMS[3]}
-			#	assegno watermark
-			freespace=`df -m $MOUNT_POINT | grep $MOUNT_POINT | awk '{print $4}'`
-			$CMD_DB" update lto_info set free=($freespace-$TAPE_WATERMARK) where label='${WORKING_PARMS[3]}'" > /dev/null 2>&1
+			#	Free space and update lto_info record
+			spaces=( `df -mP $MOUNT_POINT | grep $MOUNT_POINT | awk '{print $2" "$4}'` )
+			updatetime=`date '+%Y-%m-%dT%H:%M:%S'`
+			$CMD_DB" update lto_info set lastupdate='"$updatetime"', free=(${spaces[1]}-$TAPE_WATERMARK), capacity=(${spaces[0]}-$TAPE_WATERMARK) where label='${WORKING_PARMS[3]}'" > /dev/null 2>&1
 			bkpltoinfo
-			update_uuid_status ${OPERATION_UUIDS[0]} 60
+			#	Umount
 			umount $MOUNT_POINT
 			main_logger 1 "waiting for ltfs index update"
 			sleep $LTFSARCHIVER_LTFSTIMEOUT
 			main_logger 0 "Operation completed"
+			update_uuid_status ${OPERATION_UUIDS[0]} 60
+			#	Report will be immediatly created by tape_agent
+			successreport=true
 		;;
-		"A")
+		"A")			#	MakeavailableMount -> return path -> End
 			main_logger 1 "File systeam is ready in R/O: tape ${WORKING_PARMS[3]} is now available online"
 			main_logger 0 "${OPERATION_UUIDS[0]} succesfully completed"
+			XMLMOUNTOK="\t\t\t"'<Mount device="'${WORKING_PARMS[4]}'" path="'$MOUNT_POINT'" readonly="true"/>'
 			update_uuid_status ${OPERATION_UUIDS[0]} 60
+			#	Report will be immediatly created by tape_agent
+			successreport=true
 		;;
-		"W")
+		"W")			#	WriteToLto -> start script passing TASKID's -> End
 			main_logger 1 "File systeam is ready in R/W; starting archive"
-			#	Lancio dello script di archive (passo il nome del file di log per scrivere tutto su un unico file
-			#`dirname $0`/archive_file $MAIN_LOG_FILE ${OPERATION_UUIDS[@]} 2> $MAIN_LOG_FILE.err
+			#	Lancio dello script (passo il nome del file di log per scrivere tutto su un unico file
 			`dirname $0`/archive_file $MAIN_LOG_FILE ${OPERATION_UUIDS[@]} 2> $MAIN_LOG_ERR
 		;;
-		"R")
+		"R")			#       RestoreFromLto -> start script passing TASKID's -> End
 			main_logger 1 "File systeam is ready in R/O: starting restore"
-			#	Lancio dello script di archive (passo il nome del file di log per scrivere tutto su un unico file
+			#	Lancio dello script (passo il nome del file di log per scrivere tutto su un unico file
 			`dirname $0`/restore_file $MAIN_LOG_FILE ${OPERATION_UUIDS[@]} 2> $MAIN_LOG_ERR
-			#`dirname $0`/restore_file $MAIN_LOG_FILE ${OPERATION_UUIDS[@]}
+		;;
+		"L")			#       ListLto -> start script passing TASKID's -> End
+			main_logger 1 "File systeam is ready in R/O: starting list"
+			#	Lancio dello script (passo il nome del file di log per scrivere tutto su un unico file
+			`dirname $0`/list_tape $MAIN_LOG_FILE ${OPERATION_UUIDS[0]} 2> $MAIN_LOG_ERR
+		;;
+		"V")			#       Checksum -> start script passing TASKID's -> End
+			main_logger 1 "File systeam is ready in R/W: starting checksum"
+			#	Lancio dello script (passo il nome del file di log per scrivere tutto su un unico file
+			`dirname $0`/task_checksum $MAIN_LOG_FILE ${OPERATION_UUIDS[@]} 2> $MAIN_LOG_ERR
 		;;
 	esac
 else
-	#	Se e' andato male vediamo che fare...
+	#	Mount failed... lt's analyze why
 	case $LTFS_RC in
-		2)	#	Label sbagliata o non trovata
-			#	Devo mandare in fallout tutte le richieste archive su quel tape
+		2)	#	Wrong or missing label file
+			#	fallout all of the associated taskid's
 			main_logger 0 "Following instances will be sent to fallout:"
 			for ((FALL_IDX=0; FALL_IDX<${#OPERATION_UUIDS[@]}; FALL_IDX++)); do
 				main_logger 0 ${OPERATION_UUIDS[$FALL_IDX]}
 				fallout_uuid ${OPERATION_UUIDS[$FALL_IDX]} 601
+				create_fallout_report ${OPERATION_UUIDS[$FALL_IDX]} ${WORKING_PARMS[0]}
 			done
 		;;
-		4)		#	MOUNT RW fallito per troppo pieno
-			#	Devo mandare in riassegnazione tutte le richieste archive su quel tape
+		4)	#	RW mount failed due to "almost full tape"
+			#	reque all of the associated taskid's, so they could be redispatched to an other tape
 			main_logger 0 "Following instances will be requeued:"
 			for ((RQUE_IDX=0; RQUE_IDX<${#OPERATION_UUIDS[@]}; RQUE_IDX++)); do
 				main_logger 0 ${OPERATION_UUIDS[$RQUE_IDX]}
 				$CMD_DB" update requests set status='wait',substatus=0 where uuid='${OPERATION_UUIDS[$RQUE_IDX]}';" > /dev/null 2>&1
 			done
 		;;
-		8)		#	MOUNT ERROR (FS corrotto?)
-			#	Devo mandare in fallout tutte le richieste di archive su quel tape
-			#	Devo mandare in fallout tutte le richieste di restore/makavail su quel tape
+		8)	#	Corrupted ltfs?
+			#	fallout all of the associated taskid's
 			main_logger 0 "Following instances will be sent to fallout:"
 			for ((FALL_IDX=0; FALL_IDX<${#OPERATION_UUIDS[@]}; FALL_IDX++)); do
 				main_logger 0 ${OPERATION_UUIDS[$FALL_IDX]}
-				fallout_uuid ${OPERATION_UUIDS[$FALL_IDX]} 502
+				if [ ${WORKING_PARMS[0]} == "C" ]; then
+					fallout_uuid ${OPERATION_UUIDS[$FALL_IDX]} 503
+				else
+					fallout_uuid ${OPERATION_UUIDS[$FALL_IDX]} 502
+				fi	
+				create_fallout_report ${OPERATION_UUIDS[$FALL_IDX]} ${WORKING_PARMS[0]}
 			done
 		;;
-		32)
+		32)	#	Failed creation of an LTFS... fallout unneeded (already sent to fallout)
 			main_logger 0 "Creation of an ltfs filesystema failed: RC=$LTFS_RC. Check $MAIN_LOG_FILE for details"
 		;;
 	esac
 fi
-#	Salvo che per i Makeavailable, devo scaricare
-#	Se esterno, eject (RC da conmando)
-#	Se interno, unload (RC impostato dalla funzione)
+#	Have I to eject/unmount tape?
+#	NOTE: unmout is supplied by the script 
+#	DON'T unload/eject tape if the task was a MakeavailableMount task
+#	ALWAYS unload/eject tape if the creation of ltfs  failed
+#	EJECT when manual
+#	UNLOAD when library
 if ( [ ${WORKING_PARMS[0]} != "A" ] || [ $LTFS_RC -gt 0 ] ); then
 	if [ ${WORKING_PARMS[1]} == "M" ]; then
-		$CMD_MT -f ${WORKING_PARMS[4]} eject
-		UNLOAD_RC=$?
+		#	MANUAL... loop on eject attempts
+		main_logger 0 "Ejecting tape"
+		for ((count=1;count<6;count++)); do
+			main_logger 2 "Tape eject attempt $count"
+			$CMD_MT -f ${WORKING_PARMS[4]} eject
+			UNLOAD_RC=$?
+			if [ $UNLOAD_RC == 0 ]; then
+				count=6
+			else
+				sleep 5
+			fi
+		done
 	else
-		#	passo a dismount libreria e device
+		#	LIBRARY call unload passing library and device
+		main_logger 0 "Unloading tape"
 		unload_tape ${WORKING_PARMS[2]} ${WORKING_PARMS[4]}
 	fi
 	if [ $UNLOAD_RC == 0 ]; then
 		[ ${WORKING_PARMS[1]} == "M" ] && main_logger 2 "Tape ejected"
 		[ ${WORKING_PARMS[1]} == "C" ] && main_logger 2 "Tape successfully moved to repository slot"
-		#	Libero le risorse ed esco
+		#	free resource
 		free_resources_and_exit
 	else
 		main_logger 0 "CRITICAL ERROR while unloading tape ${WORKING_PARMS[3]}"
 	fi
-		
+else
+	#	MakeavailableMount. simply remove locks. Tape is left in the device
+	rm /tmp/ltfsarchiver.tape_agent.$$.lock
+	main_logger 0 "------------> Completed"
 fi
+#	Addtape e MakeAvailable: create report
+[ $successreport ] && create_success_report ${OPERATION_UUIDS[0]} ${WORKING_PARMS[0]}
+

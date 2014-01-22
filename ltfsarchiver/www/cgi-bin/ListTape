@@ -1,0 +1,87 @@
+#!/bin/bash
+#  PrestoPRIME  LTFSArchiver
+#  Version: 1.3
+#  Authors: L. Savio, L. Boch, R. Borgotallo
+#
+#  Copyritght (C) 2011-2012 RAI – Radiotelevisione Italiana <cr_segreteria@rai.it>
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU Affero General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU Affero General Public License for more details.
+#
+# You should have received a copy of the GNU Affero General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
+
+function insert_list()
+{
+callingtime=`date '+%Y-%m-%d %H:%M:%S'`
+$CMD_DB "INSERT INTO requests ( uuid,status,substatus,manager,operation,ltotape,sourcefile,sourcesize,callingtime, poolname, datatype) \
+	VALUES ( '$taskid','waiting',0,'$LTFSARCHIVER_MODE','L','$ltolabel','none',0,'$callingtime','','')" > /dev/null 2>&1
+RC=$?
+}
+
+# Script starts here
+. $CFGFILE
+. `dirname $0`/common.sh
+command=`basename $0`
+PARM=$QUERY_STRING
+RECEIVEDTIME=`date +'%Y-%m-%dT%H:%M:%S'`
+VALIDPARMS="TapeID|FromGUI|Output"
+output=$( get_parameter Output )
+normalize_output
+get_supplied_parameters
+ltolabel=$( get_parameter TapeID )
+guicall=$( get_parameter FromGUI )
+if [ -z $output ]; then
+	output=`echo $LTFSARCHIVER_OUTPUT | tr '[A-Z]' ' [a-z]'`
+	PARM=$PARM'&Output='$output
+fi
+[ -z $guicall ] && guicall="false"
+if ! [ -z "$BADPARMS" ]; then
+	exitcode="400"; message="${BADPARMS}"
+else
+	################
+	if [ -z $ltolabel ]; then
+		exitcode="400"; message='TapeID not supplied'
+	else
+		#	esiste?
+		esiste=`$CMD_DB" select count (*) from lto_info where label='$ltolabel';" | sed -e 's/^ *//'`
+		if [ $esiste -gt 0 ]; then
+			#	tipo di nastro (se "n/a") non e' utilizzabile)
+			LTO_DATA=`$CMD_DB" select ltotype from lto_info where label='$ltolabel';" | sed -e 's/^ *//'`
+			if [ $LTO_DATA == "n/a" ]; then
+				#	Vedo se e' coda di Addtape
+				ADDQ=`$CMD_DB" select count (*) from requests where ltotape='$ltolabel' and (operation='F' or operation='Z' or operation='C');"`
+				#	Se SI'...
+				if [ $ADDQ -gt 0 ]; then
+					exitcode="400"; message='Tape '$ltolabel' is still not available for operations'
+				else
+					exitcode="400"; message='Tape '$ltolabel' is of unknown type'
+				fi
+			else
+				#       Inserisco record di richiesta lto_pool
+				taskid=`uuidgen`
+				insert_list
+				if [ $RC == 0 ]; then
+					#	restituisco dati
+					exitcode="200"
+					crea_xml_output
+				else
+					exitcode="500"
+				fi
+			fi	
+		else
+			exitcode=400; message='LTO with label: '$ltolabel' does not exists'
+		
+		fi
+	fi
+fi
+crea_xml_answer
+send_output

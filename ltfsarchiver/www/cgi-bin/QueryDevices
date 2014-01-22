@@ -1,0 +1,112 @@
+#!/bin/bash
+#  PrestoPRIME  LTFSArchiver
+#  Version: 1.3
+#  Authors: L. Savio, L. Boch, R. Borgotallo
+#
+#  Copyritght (C) 2011-2012 RAI – Radiotelevisione Italiana <cr_segreteria@rai.it>
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU Affero General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU Affero General Public License for more details.
+#
+# You should have received a copy of the GNU Affero General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
+#	
+################################################################################
+function report_device()
+{
+[ "$2" == "more" ] && indent="\t\t\t"
+[ "$2" == "less" ] && indent="\t\t"
+DEVDATA=( `$CMD_DB" select * from lock_table where device='"$1"';" | tr -d ' ' | tr '|' ' '` )
+if [ -z ${DEVDATA} ]; then
+	XMLOUTPUT=$XMLOUTPUT$indent'<Drive device="'$1'" use="true"/>'"\n"
+else
+	case ${DEVDATA[1]} in
+		"$LTFSARCHIVER_LOCK_LABEL")
+			XMLOUTPUT=$XMLOUTPUT$indent'<Drive device="'$1'" use="false"/>'"\n"
+		;;
+		*)
+			#USEDBY=`$CMD_DB" select inuse from lto_info where label='"${DEVDATA[1]}"';" | tr -d ' ' | tr '|' ' '`
+			#XMLOUTPUT=$XMLOUTPUT$indent'<Drive device="'$1'" use="true" service="'$( get_service $USEDBY )'" TapeID="'${DEVDATA[1]}'"/>'"\n"
+			XMLOUTPUT=$XMLOUTPUT$indent'<Drive device="'$1'" use="true" TapeID="'${DEVDATA[1]}'"/>'"\n"
+		;;
+	esac
+			
+fi
+}
+# Script starts here
+. $CFGFILE
+. `dirname $0`/common.sh
+command=`basename $0`
+PARM=$QUERY_STRING
+RECEIVEDTIME=`date +'%Y-%m-%dT%H:%M:%S'`
+VALIDPARMS="TapeDevice|PoolName|FromGUI|Output"
+output=$( get_parameter Output )
+normalize_output
+get_supplied_parameters
+tapedevice=$( get_parameter TapeDevice )
+guicall=$( get_parameter FromGUI )
+XMLOUTPUT="\t"'<Output>'"\n"
+exitcode="200"
+if [ -z $output ]; then
+        output=`echo $LTFSARCHIVER_OUTPUT | tr '[A-Z]' ' [a-z]'`
+        PARM=$PARM'&Output='$output
+fi
+if ! [ -z "$BADPARMS" ]; then
+        unset XMLOUTPUT; exitcode="400"; message="${BADPARMS}"
+else
+	#	parto a false... lo porto a true quando trovo il device o se cerco su tutti
+	tapefound=false
+	if [ -z "$tapedevice" ]; then
+		tapefound=true
+		#	Quelli in librerie...
+		#	Devo aprire prima i nodi delle librerie
+		for ((ccounter=0; ccounter<${#CONF_CHANGER_DEVICES[@]}; ccounter++)); do
+			tape_array_name="CONF_CHANGER_TAPEDEV_"$ccounter"[@]"
+			temp_array=( ${!tape_array_name} )
+			XMLOUTPUT=$XMLOUTPUT"\t\t"'<Library device="'${CONF_CHANGER_DEVICES[$ccounter]}'">'"\n"
+			#	Loop sui device associati alla libreria
+			for ((tcounter=0; tcounter< ${#temp_array[@]}; tcounter++)); do
+				report_device ${temp_array[$tcounter]} "more"
+			done
+			XMLOUTPUT=$XMLOUTPUT"\t\t"'</Library>'"\n"
+		done
+		#	Loop sui device esterni
+		for ((tcounter=0; tcounter< ${#CONF_MANUAL_TAPEDEV[@]}; tcounter++)); do
+			report_device ${CONF_MANUAL_TAPEDEV[$tcounter]} "less"
+		done
+	else
+		#	creo la lista ( dev lib dev lib.... dev ext...)
+		devices_list
+		for ((k=0;k<${#TAPE_LIST[@]};k+=2)); do
+			if [ $tapedevice == ${TAPE_LIST[$k]} ]; then
+				tapefound=true
+				#	Se appartiene ad una libreria devo creare il nodo padre
+				if [ ${TAPE_LIST[$k+1]} == "ext" ]; then
+					report_device ${TAPE_LIST[$k]} "less"
+				else
+					LIBTYPE=`loaderinfo -f ${TAPE_LIST[$k+1]} | grep "Product ID" | tr -d "'" | sed -e 's/^.*://' -e 's/^ *//' -e 's/ *$//'`
+					XMLOUTPUT=$XMLOUTPUT"\t\t"'<Library device="'${TAPE_LIST[$k+1]}'">'"\n"
+					report_device ${TAPE_LIST[$k]} "more"
+					XMLOUTPUT=$XMLOUTPUT"\t\t"'</Library>'"\n"
+				fi
+			fi
+		done
+	fi
+fi
+if ! $tapefound; then
+	unset $XMLOUTPUT
+	exitcode="400"; message="TapeDevice $tapedevice not found"
+else
+	XMLOUTPUT=$XMLOUTPUT"\t"'</Output>'"\n"
+
+fi
+crea_xml_answer
+send_output

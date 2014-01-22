@@ -1,0 +1,50 @@
+#!/bin/bash
+#  PrestoPRIME  LTFSArchiver
+#  Version: 1.3
+#  Authors: L. Savio, L. Boch, R. Borgotallo
+#
+#  Copyritght (C) 2011-2012 RAI – Radiotelevisione Italiana <cr_segreteria@rai.it>
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU Affero General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU Affero General Public License for more details.
+#
+# You should have received a copy of the GNU Affero General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
+################################################################################
+# Script starts here
+. $CFGFILE
+. `dirname $0`/common.sh
+command=`basename $0`
+PARM=$QUERY_STRING
+RECEIVEDTIME=`date +'%Y-%m-%dT%H:%M:%S'`
+VALIDPARMS="FromGUI|Output"
+output=$( get_parameter Output )
+normalize_output
+get_supplied_parameters
+guicall=$( get_parameter FromGUI )
+if [ -z $output ]; then
+        output=`echo $LTFSARCHIVER_OUTPUT | tr '[A-Z]' ' [a-z]'`
+        PARM=$PARM'&Output='$output
+fi
+[ -z $guicall ] && guicall=false
+if ! [ -z "$BADPARMS" ]; then
+        exitcode="400"; message="${BADPARMS}"
+else
+	TASKS=( `$CMD_DB" select uuid,ltotape,device from requests where substatus=20 and manager='M';" | tr -d ' ' | tr '|' ' ' | tr '\n' ' '` )
+	XMLOUTPUT="\t"'<Output>'"\n"
+	for ((ti=0;ti<${#TASKS[@]};ti+=3)); do
+		XMLOUTPUT=$XMLOUTPUT"\t\t"'<ManualLoad device="'${TASKS[$j+2]}'" taskID="'${TASKS[$j]}'" tapeID="'${TASKS[$j+1]}'"/>'"\n"
+	done
+	XMLOUTPUT=$XMLOUTPUT"\t"'</Output>'"\n"
+	exitcode="200"
+fi
+crea_xml_answer
+send_output

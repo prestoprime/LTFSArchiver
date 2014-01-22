@@ -1,0 +1,64 @@
+#!/bin/bash
+#  PrestoPRIME  LTFSArchiver
+#  Version: 1.3
+#  Authors: L. Savio, L. Boch, R. Borgotallo
+#
+#  Copyritght (C) 2011-2012 RAI – Radiotelevisione Italiana <cr_segreteria@rai.it>
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU Affero General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU Affero General Public License for more details.
+#
+# You should have received a copy of the GNU Affero General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
+
+################################################################################
+# GETSTATUS GETSTATUS GETSTATUS GETSTATUS GETSTATUS GETSTATUS GETSTATUS GETSTATUS
+#	Script starts here
+. $CFGFILE
+. `dirname $0`/common.sh
+command=`basename $0`
+PARM=$QUERY_STRING
+RECEIVEDTIME=`date +'%Y-%m-%dT%H:%M:%S'`
+VALIDPARMS="TaskID|FromGUI|Output"
+output=$( get_parameter Output )
+normalize_output
+get_supplied_parameters
+taskid=$( get_parameter TaskID )
+guicall=$( get_parameter FromGUI )
+if [ -z $output ]; then
+	output=`echo $LTFSARCHIVER_OUTPUT | tr '[A-Z]' ' [a-z]'`
+	PARM=$PARM'&Output='$output
+fi
+[ -z $guicall ] && guicall="false"
+
+test_passed=true
+if ! [ -z "$BADPARMS" ]; then
+	exitcode="400"; messaeg="${BADPARMS}"
+	test_passed=false
+fi
+if $test_passed; then
+	if [ -z $taskid ]; then
+		exitcode="400";message='TaskID not supplied'
+		test_passed=false
+	fi
+fi
+if $test_passed; then
+	DATA=( `$CMD_DB "select operation,status,substatus,starttime from requests where uuid='"$taskid"';" | tr -d ' ' | tr '|' ' '` )
+	if [ -z $DATA ]; then
+		exitcode="400";message="TaskID $taskid not found"
+		test_passed=false
+	fi
+fi	
+if $test_passed; then
+	task_details "single"
+fi
+crea_xml_answer
+send_output

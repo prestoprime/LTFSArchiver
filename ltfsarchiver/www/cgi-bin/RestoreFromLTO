@@ -1,7 +1,6 @@
 #!/bin/bash
-
 #  PrestoPRIME  LTFSArchiver
-#  Version: 1.0 Beta
+#  Version: 1.3
 #  Authors: L. Savio, L. Boch, R. Borgotallo
 #
 #  Copyritght (C) 2011-2012 RAI – Radiotelevisione Italiana <cr_segreteria@rai.it>
@@ -19,99 +18,93 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-. $CFGFILE
-. `dirname $0`/common.sh
-
 function insert_restore()
 {
 callingtime=`date '+%Y-%m-%d %H:%M:%S'`
 
 $CMD_DB "INSERT INTO requests ( uuid,status,substatus,manager,operation,sourcefile,destfile,callingtime,ltotape ) \
-	VALUES ( '$taskid','wait',0,'$LTFSARCHIVER_MODE','R','$filesrc','$filedest','$callingtime','`echo \"$filesrc\" | cut -d ":" -f 2`' )" > /dev/null 2>&1
+	VALUES ( '$taskid','waiting',0,'$LTFSARCHIVER_MODE','R','$filesrc','$filedest','$callingtime','`echo \"$filesrc\" | cut -d ":" -f 2`' )" > /dev/null 2>&1
 RC=$?
 }
 
 # Script starts here
+. $CFGFILE
+. `dirname $0`/common.sh
+command=`basename $0`
 PARM=$QUERY_STRING
-command=$( get_parameter Command )
+RECEIVEDTIME=`date +'%Y-%m-%dT%H:%M:%S'`
+VALIDPARMS="FileName|DestPath|FromGUI|Output"
+output=$( get_parameter Output )
+normalize_output
+get_supplied_parameters
+filesrc=$( get_parameter FileName )
+filedest=$( get_parameter DestPath )
+format=$( get_parameter Format )
 guicall=$( get_parameter FromGUI )
-case $command in
-	#       GETRESULT/GETSTATUS
-	"GetResult"|"GetStatus")
-		#       devo leggere il taskid
-		taskid=$( get_parameter TaskID )
-		if [ -z $taskid ]; then
-			#message="Empty TaskID supplied"
-			message="400\tInvalid or empty ID"
+if [ -z $output ]; then
+        output=`echo $LTFSARCHIVER_OUTPUT | tr '[A-Z]' ' [a-z]'`
+        PARM=$PARM'&Output='$output
+fi
+[ -z $guicall ] && guicall=false
+if ! [ -z "$BADPARMS" ]; then
+	exitcode="400"; message="${BADPARMS}"; test_passed=false
+else
+	test_passed=true
+fi
+#	Check FileName
+if $test_passed ; then
+	if  [ -z "$filesrc" ]; then
+		exitcode="400";message="Empty FileName supplied "; test_passed=false
+	else
+		#	sintassi flocat
+		FLO_PARTS=( `echo $filesrc | tr ':' ' '` )
+		if [ ${#FLO_PARTS[@]} -lt 3 ]; then
+			exitcode="400"; message="Invalid flocat syntax"; test_passed=false
 		else
-			#       ====================================
-			#       Query DB, leggo info
-			getinfo_common
-		fi
-	;;
-	"RestoreFile")
-		#	devo leggere il filename da restorare
-		filesrc=$( get_parameter FileName )
-		#	devo leggere il path su cui restorare
-		filedest=$( get_parameter DestPath )
-		#       devo fornire il taskid
-		if ( [ -z "$filesrc" ] || [ -z "$filedest" ] ); then
-			message="400\t"
-			[ -z "$filesrc" ] && message=$message"Empty FileName supplied; "
-			[ -z "$filedest" ] && message=$message"Empty DestPath supplied; "
-		else
-			#	c'e' un LTO con quella label?
-			FOUND=`$CMD_DB "SELECT count(*) FROM lto_info WHERE label = '\`echo "$filesrc" | cut -d ":" -f 2\`';" | head -1`
-			if [ $FOUND == 0 ]; then
-				message="400\tInvalid Flocat"
+			if ! [ ${FLO_PARTS[0]} == "lto-ltfs" ]; then
+				exitcode="400"; message="Invalid flocat type"; test_passed=false
 			else
-				#	la directory di arrivo deve esistere 
-				basedest=`dirname "$filedest" | sed -e 's/.*\://'`
-				if [ -d $basedest ]; then
-					#	ma non deve esistere l'oggetto destinatario
-					if ( [ -d "$filedest" ] || [ -e "$filedest" ] || [ -f "$filedest" ] ); then
-						message="400\tDestination path \"$filedest\" exists"
-					else
-						taskid=`uuidgen`
-						#	====================================
-						#	Insert DB
-						insert_restore
-						if [ $RC == 0 ]; then
-							#	restituisco dati
-							#	====================================
-							message="200\t$taskid"
-						else
-							message="500\tFailed"
-						fi
-					fi
-				else
-					message="400\tDestination upper level path \"$basedest\" doesn't exist"
+				cercatape ${FLO_PARTS[1]}
+				if [ $trovato == 0 ]; then
+					exitcode="400"; message="Tape referred by flocat (${FLO_PARTS[1]}) not found"; test_passed=false
 				fi
 			fi
 		fi
-		;;
-		"Cancel")
-			#       devo leggere il taskid
-			taskid=$( get_parameter TaskID )
-			if [ -z $taskid ]; then
-				message="400\tInvalid or empty ID"
-			else
-				cancel_common "('R')"
-			fi
-		;;
-		"Resubmit")
-			#       devo leggere il taskid
-			taskid=$( get_parameter TaskID )
-			if [ -z $taskid ]; then
-				message="400\tInvalid or empty ID"
-			else
-				requeue_common "('R')"
-
-			fi
-		;;
-
-	*)
-		message="400\tInvalid command"
-	;;
-esac
-output_text_common
+	fi	
+fi
+#	Check destPath
+if $test_passed ; then
+	if  [ -z "$filedest" ]; then
+		exitcode="400";message="Empty DestPath supplied "; test_passed=false
+	else
+		if [ `echo "$filedest" | cut -b 1` != "/" ] ; then
+			exitcode="400";message="Invalid DestPath \"$filedest\" supplied (it must be in absolute form)"; test_passed=false
+		fi
+	fi
+fi
+if $test_passed; then
+	#       la directory di arrivo deve esistere
+	basedest=`dirname "$filedest" | sed -e 's/.*\://'`
+	if [ -d $basedest ]; then
+		#       ma non deve esistere l'oggetto destinatario
+		if ( [ -d "$filedest" ] || [ -e "$filedest" ] || [ -f "$filedest" ] ); then
+			exitcode="400"; message="Destination path/file \"$filedest\" already exists"; test_passed=false
+		fi
+	else
+		exitcode="400";	message="Destination upper level path \"$basedest\" doesn't exist"; test_passed=false
+	fi
+fi
+if $test_passed; then
+	taskid=`uuidgen`
+	#       Insert DB
+	insert_restore
+	if [ $RC == 0 ]; then
+		exitcode="200"
+		crea_xml_output
+	else
+		unset taskid
+		message="500"; message="error occurred while inserting request"
+	fi
+fi
+crea_xml_answer
+send_output

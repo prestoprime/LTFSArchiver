@@ -1,0 +1,239 @@
+#!/bin/bash
+
+#  PrestoPRIME  LTFSArchiver
+#  Version: 1.3
+#  Authors: L. Savio, L. Boch, R. Borgotallo
+#
+#  Copyritght (C) 2011-2012 RAI – Radiotelevisione Italiana <cr_segreteria@rai.it>
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU Affero General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU Affero General Public License for more details.
+#
+# You should have received a copy of the GNU Affero General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+############################################################################################
+
+function create_merged_report()
+{
+#	Merge previously stored and new xmls into a unique temporary report
+$CMD_XSL --stringparam newflocatfile $LTFSARCHIVER_HOME/reportfiles/$WORKING_UUID.xml $XSLFILE3 $INPUTFLOCAT > /tmp/$WORKING_UUID.temp.xml
+#	Reformat temp reprt and overwrite the one created by checksum
+$CMD_XMLLINT --format /tmp/$WORKING_UUID.temp.xml > $LTFSARCHIVER_HOME/reportfiles/$WORKING_UUID.xml
+#	Then copy it on tape, naming it using the checked task ID
+cp -p $LTFSARCHIVER_HOME/reportfiles/$WORKING_UUID.xml $TAPEDIR/$SOURCEID.xml
+#	finally deletes temp file
+[ -f /tmp/$WORKING_UUID.temp.xml ] && rm -f /tmp/$WORKING_UUID.temp.xml
+}
+
+
+function match_and_report()
+{
+#	match values
+if [ "${CHKTOMATCH}" == ${CHKONTAPE} ]; then
+	MATCHRC='true'
+else
+	MATCHRC='false'
+	let MATCH_COUNT+=1
+fi
+#	Than add the "new" flocat into output file
+echo -e "\t\t"'<FLocat xlink:href="'${FILEFLOCAT}'">' >>$FLOCATFILE
+echo -e "\t\t\t"'<checksum type="'$CHECKSUMTYPE'" expectedvalue="'$CHKTOMATCH'" value="'$CHKONTAPE'" match="'$MATCHRC'" lastChecked="'$nowtime'"/>' >>$FLOCATFILE
+echo -e "\t\t"'</FLocat>' >> $FLOCATFILE
+#echo "$MATCHRC" "${FILEFLOCAT}" "$CHKONTAPE" "$CHKTOMATCH" >> $DEBUG_LOG
+}
+
+
+function add_new_value()
+{
+#	simply add the "new" flocat into output file
+echo -e "\t\t"'<FLocat xlink:href="'${FILEFLOCAT}'">' >>$FLOCATFILE
+echo -e "\t\t\t"'<checksum type="'$CHECKSUMTYPE'" value="'$CHKONTAPE'"/>' >>$FLOCATFILE
+echo -e "\t\t"'</FLocat>' >> $FLOCATFILE
+#echo "ADD $FILEFLOCAT" "$CHKONTAPE" >> $DEBUG_LOG
+}
+
+
+function runchecksum()
+{
+#	first step: copy the xml filelist into /tmp  adding a root node with namespaces
+cp $TAPEDIR/$SOURCEID.xml $INPUTFLOCAT
+#	second step: create content list sorted on filesize (ignoring xml filelist)
+#		This will allow to move only one time between a and b partition
+#	sed removes size to get only file path
+find $TAPEDIR -type f -printf '%s@%P\n' | sort -n -k1 | grep -v $SOURCEID.xml | sed -e 's/^.*@//' > /tmp/$WORKING_UUID.tapelist
+#	third step: determine the algorythm to be used
+RUNPARMS=( `$CMD_DB "select checksum,checksumfile from requests where uuid='"$WORKING_UUID"';" | tr -d ' ' | tr '|' ' '` )
+ #	Lists checksum types already stored into filelist
+#CHKSAVED=( `$CMD_XSL $XSLFILE1 $INPUTFLOCAT | awk '{print $1}' | sort --unique | sed -e '/^$/d'` )
+CHKSAVED=( ` grep "<checksum"  $INPUTFLOCAT | sed -e 's/^.*type="//' | sed -e 's/".*//' | sort --unique` )
+#	What kind of activity shall I do?
+case ${RUNPARMS[0]} in
+	"MD5"|"SHA1")	#	You told me the checksum type
+		CHECKSUMTYPE=${RUNPARMS[0]}
+		tmptmp="CMD_"$CHECKSUMTYPE
+		CHECKSUMCMD=${!tmptmp}
+		#	if required checksum type has been already computed, it performs coumpute & test
+		#	Supposing that checksums are to be saved...
+		MATCHORSAVE="SAVE"
+		for ((j=0;j<${#CHKSAVED[$j]};j++)); do
+			if [ ${RUNPARMS[0]} == ${CHKSAVED[$j]} ]; then
+				#	Checksum type found... set operation to "MATCH"
+				MATCHORSAVE="MATCH"
+			fi
+		done
+	;;
+	"FILE")		#	Looking for checksum type into the first line
+		CHECKSUMTYPE=`head -1 ${RUNPARMS[1]} | tr -d '#'`
+		tmptmp="CMD_"$CHECKSUMTYPE
+		CHECKSUMCMD=${!tmptmp}
+		#	Checksum type found... set operation to "MATCH"
+		MATCHORSAVE="MATCH"
+	;;
+	"auto")		#	How many existing checksum found on old report file?
+		case ${#CHKSAVED[@]} in
+			0)		#	No way... FALLOUT
+				MATCHORSAVE="NONE"
+				FALLOUTCODE="207"
+			;;
+			1)		#	OK, I will use that one
+				tmptmp="CMD_"${CHKSAVED[0]}
+				CHECKSUMTYPE=${CHKSAVED[0]}
+				CHECKSUMCMD=${!tmptmp}
+				MATCHORSAVE="MATCH"
+			;;
+			*)		#	Too many... FALLOUT
+				MATCHORSAVE="NONE"
+				FALLOUTCODE="208"
+			;;
+		esac
+	;;
+esac
+if [ $MATCHORSAVE != "NONE" ]; then
+	#	Now the hard part...
+	#	Loop on temporary filelist
+	IFS=$'\n'
+	MATCH_COUNT=0
+	ERROR_COUNT=0
+	for BASEFILEONTAPE in `cat /tmp/$WORKING_UUID.tapelist`; do
+		nowtime=`date '+%Y-%m-%dT%H:%M:%S'`
+		FILEONTAPE=$TAPEDIR/$BASEFILEONTAPE
+		#	change path into original FLocat
+		FILEFLOCAT=`echo "${FILEONTAPE}" | sed -e 's;'$SOURCEFS'/;lto-ltfs:'${WORKING_PARMS[0]}':;'`
+		#	Always calculates the checksum of the file on tape
+		CHKONTAPE=`$CHECKSUMCMD $FILEONTAPE | awk '{print $1}'`
+		#	Read checksum computation exit code
+		if [ $? == 0 ]; then
+			case $MATCHORSAVE in
+				"MATCH")	#	I need a checksum value to metch...
+					if [ ${RUNPARMS[0]} == "FILE" ]; then
+						#	Look into supplied file for expected value
+						CHKTOMATCH=`grep "${FILEFLOCAT}" ${RUNPARMS[1]} | cut -d ' ' -f 1`
+					else
+						#	Look into listfile for expected value
+						CHKTOMATCH=`$CMD_XSL --stringparam flocat "${FILEFLOCAT}" --stringparam chktype "${CHKSAVED[0]}" $XSLFILE2 $INPUTFLOCAT`
+					fi
+					match_and_report
+				;;
+				"SAVE")		#	OK, compute, save it
+					add_new_value
+				;;
+			esac
+		else
+			#	Error while computing checksum... oops
+			let ERROR_COUNT+=1
+		fi
+	done
+	unset IFS
+fi
+
+
+}
+ 
+#	Incoming parms:
+#       $1 = Path to log file
+#       $2-n = Task UUID
+#########################
+#############   MAIN MAIN MAIN
+CFG_FILE=`dirname $0`/../conf/ltfsarchiver.conf
+. $CFG_FILE
+. $LTFSARCHIVER_HOME/sbin/common.sh
+###############################
+DEBUG_LOG=$LTFSARCHIVER_HOME/logs/checksum.debug.txt
+PARMSN=$#
+PARMSS=( $@ )
+MAIN_LOG_FILE=${PARMSS[0]}
+for ((PARMIDX=1;PARMIDX<${PARMSN};PARMIDX++)); do
+	WORKING_UUID=${PARMSS[$PARMIDX]}
+	#	Path to the output tempfile to be created
+	FLOCATFILE=/tmp/${WORKING_UUID}.output.xml
+	[ -f ${FLOCATFILE} ] && rm -f ${FLOCATFILE}
+	#	Path to the xsl files that will be used
+	XSLFILE1="$LTFSARCHIVER_HOME/stylesheets/listchksumtypes.xsl"
+	XSLFILE2="$LTFSARCHIVER_HOME/stylesheets/getchecksumvalue.xsl"
+	XSLFILE3="$LTFSARCHIVER_HOME/stylesheets/mergeOutput.xsl"
+	
+	#       reading label, device and flocat from DB
+	WORKING_PARMS=( `$CMD_DB" select ltotape, device, sourcefile from requests where uuid='$WORKING_UUID';" | tr -d ' ' | tr '|' ' ' ` )
+	#	The tape is ltfsmounted here:
+	SOURCEFS=/mnt/ltfs`basename ${WORKING_PARMS[1]}`
+	SOURCEID=`echo ${WORKING_PARMS[2]} | cut -d ':' -f 3`
+	#	This the directory to work with
+	TAPEDIR=$SOURCEFS/$SOURCEID
+	#	Path to the tempfile to be read/modified according to request
+	INPUTFLOCAT=/tmp/${SOURCEID}.input.xml
+	#	forward substatus tu RUNNING
+	update_uuid_status $WORKING_UUID 50
+	
+	#	check if directory exists
+	if [ -d $BASEPATH ]; then
+		#	Open output XMu
+		runchecksum
+		# MATCHORSAVE = NONE means that it was not possible tu run checksum... uses FALLOUTCODE to fallout an exit
+		if [ $MATCHORSAVE == "NONE" ]; then
+			fallout_uuid $WORKING_UUID $FALLOUTCODE
+			create_fallout_report $WORKING_UUID "V"
+		#	otherwise checks error counter to determine if checksum had success...
+		else
+			if [ $ERROR_COUNT == 0 ]; then
+				update_uuid_status $WORKING_UUID 60
+				create_success_report $WORKING_UUID "V"
+			else
+				fallout_uuid $WORKING_UUID 112
+				create_fallout_report $WORKING_UUID "V"
+			fi
+			#	Merge original XML with newly created
+			create_merged_report
+		fi
+	else
+		fallout_uuid $WORKING_UUID 204
+		create_fallout_report $WORKING_UUID "V"
+	fi
+	#	Report file 
+	[ -f $FLOCATFILE ] && rm -f $FLOCATFILE
+	#	Remove temp files
+	[ -f $INPUTFLOCAT ] && rm -f $INPUTFLOCAT
+	[ -f /tmp/$WORKING_UUID.tapelist ] && rm -f /tmp/$WORKING_UUID.tapelist
+done
+#       umount of file sistem
+#       tape will be unloaded/ejected by tape_archive that called me
+for ((attempt=1; attempt<5 ; attempt++)); do
+        umount $SOURCEFS
+        URC=$?
+        main_logger 5 "Umount command returned: $URC"
+        if [ $URC == 0 ]; then
+                attempt=6
+        else
+                main_logger 0 "Umount attempt $attempt failed: RC=$URC"
+                sleep `echo "$attempt * 5" | bc`
+        fi
+done
+#       waiting for LTFS index flushing
+main_logger 1 "Waiting while LTFS updates index... $LTFSARCHIVER_LTFSTIMEOUT sec."
+sleep $LTFSARCHIVER_LTFSTIMEOUT

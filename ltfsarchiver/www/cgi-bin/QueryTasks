@@ -1,0 +1,300 @@
+#!/bin/bash
+#  PrestoPRIME  LTFSArchiver
+#  Version: 1.3
+#  Authors: L. Savio, L. Boch, R. Borgotallo
+#
+#  Copyritght (C) 2011-2012 RAI – Radiotelevisione Italiana <cr_segreteria@rai.it>
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU Affero General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU Affero General Public License for more details.
+#
+# You should have received a copy of the GNU Affero General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
+function poolexists()	#	Verifica che il pool esista
+{
+echo `$CMD_DB "select count(*) from lto_info where poolname='$1'" | tr -d ' '`
+}
+function tapeexists()	#	Verifica che il pool esista
+{
+echo `$CMD_DB "select count(*) from lto_info where label='$1'" | tr -d ' '`
+}
+
+function managefilecond()
+{
+if ! [ -z $filemode ] ; then
+	case $filemode in
+		"like")
+			FILEQUERY=" sourcefile like'%"$filename"%'" 
+		;;
+		*)
+			FILEQUERY=" sourcefile='"$filename"'" 
+		;;
+	esac
+fi
+}
+function managedates()
+{
+if ! [ -z $reqdate ]; then
+	TIMEQUERY=" date_trunc('day', callingtime)='"$reqdate"'"
+else
+	if ( ! [ -z $fromdate ] && [ -z $todate ] ); then
+		TIMEQUERY=" date_trunc('day', callingtime)>='"$fromdate"'"
+	elif ( ! [ -z $todate ] && [ -z $fromdate ] ); then
+		TIMEQUERY=" date_trunc('day', callingtime)<='"$todate"'"
+	elif ( ! [ -z $todate ] && ! [ -z $fromdate ] ); then
+		TIMEQUERY=" date_trunc('day', callingtime) between '"$fromdate"' and '"$todate"'"
+	fi
+fi
+}
+
+################################################################################
+# Script starts here
+
+# Script starts here
+. $CFGFILE
+. `dirname $0`/common.sh
+command=`basename $0`
+PARM=$QUERY_STRING
+RECEIVEDTIME=`date +'%Y-%m-%dT%H:%M:%S'`
+VALIDPARMS="Status|FileName|FileMode|Date|FromDate|ToDate|PoolName|LTFSAction|TapeID|FromGUI|Output"
+output=$( get_parameter Output )
+normalize_output
+get_supplied_parameters
+taskstatus=$( get_parameter Status )
+filename=$( get_parameter FileName )
+filemode=$( get_parameter FileMode )
+reqdate=$( get_parameter Date )
+fromdate=$( get_parameter FromDate )
+todate=$( get_parameter ToDate )
+tapeid=$( get_parameter TapeID )
+poolname=$( get_parameter PoolName )
+ltfsaction=$( get_parameter LTFSAction )		#	W=Write/R=Restore/A=Add/M=MakeAvailable
+guicall=$( get_parameter FromGUI )
+if [ -z $output ]; then
+        output=`echo $LTFSARCHIVER_OUTPUT | tr '[A-Z]' ' [a-z]'`
+        PARM=$PARM'&Output='$output
+fi
+[ -z $guicall ] && guicall=false
+test_passed=true
+if ! [ -z "$BADPARMS" ]; then
+        exitcode="400"; message="${BADPARMS}"
+        test_passed="f"
+fi
+#	Controlli
+#		LTFSAction
+if $test_passed; then
+	if [ ! -z $ltfsaction ]; then
+		case $ltfsaction in 
+			"WriteToLTO"|"RestoreFromLTO"|"MakeAvailableMount"|"MakeAvailableUnmount"|"AddTape"|"ListTape"|"Checksum")
+			;;
+			*)
+				exitcode="400"; message="LTFSAction $ltfsaction is invalid: accepted values: WriteToLTO|RestorefromLTO|MakeAvailableMount|MakeAvailableUnmount|AddTape"
+				test_passed=false
+			;;
+		esac
+	fi
+fi
+#		Status
+if $test_passed; then
+	if [ ! -z $taskstatus ]; then
+		case $taskstatus in 
+			"waiting"|"starting"|"running"|"completed"|"fallout")
+			;;
+			*)
+				exitcode="400"; message="LTFSAction $taskstatus is invalid: accepted values: waiting|starting|running|completed|fallout"
+				test_passed=false
+			;;
+		esac
+	fi
+fi
+#		FileName
+if $test_passed; then
+	if ! [ -z $filename ]; then
+		case $ltfsaction in
+			"AddTape"|"MakeAvailableMount"|"MakeAvailableUnmount"|"ListTape"|"Checksum")
+				exitcode="400"; message="LTFSAction $ltfsaction does not allow FileName specification"
+				test_passed=false
+			;;
+		esac
+	fi
+fi
+#		FileMode
+if $test_passed; then
+	if ! [ -z $filemode ]; then
+		case  $ltfsaction in
+			"AddTape"|"MakeAvailableMount"|"MakeAvailableUnmount"|"ListTape"|"Checksum")
+				exitcode="400"; message="LTFSAction $ltfsaction does not allow FileMode specification"
+				test_passed=false
+			;;
+			*)
+				case $filemode in
+					"like"|"exact")
+					;;
+					*)
+						exitcode="400"; message="Filemode $filemode is invalid: accepted values: exact|like"
+						test_passed=false
+					;;
+				esac
+			;;
+		esac
+	else
+		case  $ltfsaction in
+			"AddTape"|"MakeAvailableMount"|"MakeAvailableUnmount"|"ListTape"|"Checksum")
+			;;
+			*)
+				filemode="exact"	
+        			PARM=$PARM'&FileMode='$filemode
+			;;
+		esac
+	fi
+fi
+#		Date
+#	1)controllo esclusivita' DATE/ FROM-TO
+if $test_passed;  then
+	if ! [ -z $reqdate ]; then
+		if  ( ! [ -z $fromdate ] || ! [ -z $todate ] ); then
+			exitcode=400; message="Date and FromDate or ToDate are mutually exclusive"
+			test_passed=false
+		fi
+	fi
+fi
+#	2) controllo  validita' data
+if $test_passed; then
+	if ! [ -z $reqdate ]; then
+		temp=`date --date $reqdate +%s`
+		if [ $? -ne 0 ]; then
+			exitcode=400;message="Date $reqdate is invalid"
+			test_passed=false
+		fi
+	fi
+fi
+if $test_passed; then
+	if ! [ -z $fromdate ]; then
+		temp=`date --date $fromdate +%s`
+		if [ $? -ne 0 ]; then
+			exitcode=400;message="FromDate $fromdate is invalid"
+			test_passed=false
+		fi
+	fi
+fi
+if $test_passed; then
+	if ! [ -z $todate ]; then
+		temp=`date --date $todate +%s`
+		if [ $? -ne 0 ]; then
+			exitcode=400;message="ToDate $todate is invalid"
+			test_passed=false
+		fi
+	fi
+fi
+#	3) controllo congruita'
+#		a) data esatta non successiva a quella odierna
+#		b) fromdare non successiva a quella odierna
+#		c) from non successiva a to
+if $test_passed; then
+nowepoc=`date +%s`
+	if ! [ -z $reqdate ]; then
+		if [ `date --date $reqdate +%s` -gt $nowepoc ]; then
+			exitcode="400"; message="Date $reqdate not valid (beyond today's date)"
+			test_passed=false
+		fi
+	fi
+	if ! [ -z $fromdate ]; then
+		if  [ `date --date $fromdate +%s` -gt $nowepoc ]; then
+			exitcode="400"; message="FromDate $fromdate not valid (beyond today's date)"
+			test_passed=false
+		fi
+		if ! [ -z $todate ]; then
+			if  [ `date --date $fromdate +%s` -gt `date --date \'$todate\' +%s` ]; then
+				exitcode="400"; message="FromDate supplied ($fromdate) beyond  ToDate ($todate)"
+				test_passed=false
+			fi
+		fi
+	fi
+fi
+
+#		PoolName
+if $test_passed; then
+	if ! [ -z $poolname ]; then
+		if [ $( poolexists $poolname ) == 0 ]; then
+			exitcode=400; message="Pool $poolname does not exist"
+			test_passed="f"
+		fi 
+	fi
+fi
+#		TapeID
+if $test_passed; then
+	if ! [ -z $tapeid ]; then
+		if ! [ $( tapeexists $tapeid ) == 0 ]; then
+			exitcode=400; message="Pool $poolname does not exist"
+			test_passed="f"
+		fi 
+	fi
+fi
+#####################################################################################
+if $test_passed; then
+	BASEQUERY="select uuid from requests"
+	JOINER=" where"
+	case $ltfsaction in
+		"WriteToLTO")
+			TASKQUERY=" operation='W' "
+		;;
+		"RestoreFromLTO")
+			TASKQUERY=" operation='R' "
+		;;
+		"AddTape")
+			TASKQUERY=" (operation='F' or operation='Z' or operation='C') "
+		;;
+		"MakeavailableMount")
+			TASKQUERY=" operation='A' "
+		;;
+		"MakeavailableMount")
+			TASKQUERY=" operation='U' "
+		;;
+		"ListTape")
+			TASKQUERY=" operation='L' "
+		;;
+		"Checksum")
+			TASKQUERY=" operation='V' "
+		;;
+		*)
+		;;
+	esac
+	[ -z $tapeid ] || TAPEQUERY=" ltotape='"$tapeid"'"
+	[ -z $poolname ] || POOLQUERY=" poolname='"$poolname"'"
+	[ -z $taskstatus ] || STATQUERY=" status='"$taskstatus"'"
+	[ -z $filename ] || managefilecond
+	managedates
+	#	MONTO LA QUERY
+	for COND in TAPEQUERY POOLQUERY TASKQUERY STATQUERY FILEQUERY TIMEQUERY; do
+		if ! [ -z ${!COND} ]; then
+			BASEQUERY=${BASEQUERY}${JOINER}${!COND}
+			JOINER=" and"
+		fi
+	done
+	BASEQUERY=${BASEQUERY}" order by callingtime;"
+	#	Array "a passo 4" con UUID, status, substatus, e operazione
+	TASKARRAY=( `$CMD_DB "${BASEQUERY}" | tr -d ' ' | tr '|' ' ' | tr '\n' ' '` )
+	if [ ${#TASKARRAY[@]} == 0 ]; then
+		exitcode="404"; message="No task found matching search criteria"
+	else
+		GLOBXMLOUTPUT="\t"'<Output>'"\n"
+		for ((ti=0;ti<${#TASKARRAY[@]};ti++)); do
+			taskid=${TASKARRAY[$ti]}
+			task_details "multi"
+			GLOBXMLOUTPUT=${GLOBXMLOUTPUT}${XMLOUTPUT}
+		done
+		GLOBXMLOUTPUT=${GLOBXMLOUTPUT}"\t"'</Output>'
+		XMLOUTPUT=$GLOBXMLOUTPUT
+		exitcode="200"
+	fi
+fi
+crea_xml_answer
+send_output

@@ -1,6 +1,6 @@
 #!/bin/bash
 #  PrestoPRIME  LTFSArchiver
-#  Version: 1.0 Beta
+#  Version: 1.3
 #  Authors: L. Savio, L. Boch, R. Borgotallo
 #
 #  Copyritght (C) 2011-2012 RAI âadiotelevisione Italiana <cr_segreteria@rai.it>
@@ -17,7 +17,7 @@
 #
 # You should have received a copy of the GNU Affero General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
-. /opt/ltfsarchiver/conf/ltfsarchiver.conf
+. _LTFSARCHIVER_HOME_/conf/ltfsarchiver.conf
 CLEANLOGIFLE=$LTFSARCHIVER_LOGDIR/ltfsarchiver.clean.`date +'%Y-%m-%d'`.log
 if ! (( $LTFSARCHIVER_DAYSKEEP > 0 )); then
 	echo "Bad value supplied for LTFSARCHIVER_DAYSKEEP parameter: $LTFSARCHIVER_DAYSKEEP" >> $CLEANLOGIFLE

@@ -1,0 +1,74 @@
+#!/bin/bash
+#  PrestoPRIME  LTFSArchiver
+#  Version: 1.3
+#  Authors: L. Savio, L. Boch, R. Borgotallo
+#
+#  Copyritght (C) 2011-2012 RAI – Radiotelevisione Italiana <cr_segreteria@rai.it>
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU Affero General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU Affero General Public License for more details.
+#
+# You should have received a copy of the GNU Affero General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
+function requeue_taskid()
+{
+response=( `$CMD_DB "SELECT substatus, operation FROM requests WHERE uuid = '$taskid';" | tr -d ' ' | tr '|' ' ' ` )
+case ${response[0]} in
+	9|99)
+		$CMD_DB "update requests set status='waiting',substatus=0,ltolibrary='NONE',device='n/a',errordescription='NULL',errorcode=NULL,manager='$LTFSARCHIVER_MODE' WHERE uuid = '$taskid';" > /dev/null 2>&1
+		if [ $? == 0 ]; then
+			exitcode="200"
+		else
+			exitcode="500"; message="Error occured while requeueing"
+		fi
+	;;
+	19)
+		exitcode="400"; message="TaskID $taskid cannot be requeued"
+	;;
+	*)
+		exitcode="400";	message="TaskID $taskid is not in fallout status"
+	;;
+esac
+}
+########################################à[5~
+
+. $CFGFILE
+. `dirname $0`/common.sh
+command=`basename $0`
+PARM=$QUERY_STRING
+RECEIVEDTIME=`date +'%Y-%m-%dT%H:%M:%S'`
+VALIDPARMS="TaskID|FromGUI|Output"
+output=$( get_parameter Output )
+normalize_output
+get_supplied_parameters
+taskid=$( get_parameter TaskID )
+guicall=$( get_parameter FromGUI )
+if [ -z $output ]; then
+	output=`echo $LTFSARCHIVER_OUTPUT | tr '[A-Z]' ' [a-z]'`
+	PARM=$PARM'&Output='$output
+fi
+[ -z $guicall ] && guicall=false
+if ! [ -z "$BADPARMS" ]; then
+	exitcode="400"; message="${BADPARMS}"
+else
+	if [ -z $taskid ]; then
+		exitcode="400";	message="Empty TaskID supplied"
+	else
+		exists=( `$CMD_DB "SELECT count (*) from requests WHERE uuid = '$taskid';" | tr -d ' ' | tr '|' ' ' ` )
+		if [ $exists = 0 ]; then
+			exitcode="404";	message="TaskID not found"
+		else
+			requeue_taskid $taskid
+		fi
+	fi
+fi
+crea_xml_answer
+send_output

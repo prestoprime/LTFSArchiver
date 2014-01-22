@@ -44,11 +44,13 @@ ALTER TABLE public.lock_table OWNER TO pprime;
 
 CREATE TABLE lto_info (
     label character varying(8) NOT NULL,
-    free integer,
-    booked integer,
+    free integer DEFAULT 0 NOT NULL,
+    booked integer DEFAULT 0 NOT NULL,
     inuse character varying(1),
     poolname character varying(16),
-    ltotype character varying(4) DEFAULT 'n/a'::character varying
+    ltotype character varying(4) DEFAULT 'n/a'::character varying,
+    lastupdate timestamp with time zone,
+    capacity integer DEFAULT 0 NOT NULL
 );
 
 
@@ -112,7 +114,7 @@ ALTER SEQUENCE requests_id_seq OWNED BY requests.id;
 -- Name: requests_id_seq; Type: SEQUENCE SET; Schema: public; Owner: pprime
 --
 
-SELECT pg_catalog.setval('requests_id_seq', 671, true);
+SELECT pg_catalog.setval('requests_id_seq', 798, true);
 
 
 --
@@ -127,8 +129,9 @@ ALTER TABLE ONLY requests ALTER COLUMN id SET DEFAULT nextval('requests_id_seq':
 --
 
 COPY db_info (dbversion) FROM stdin;
-1
+2
 \.
+
 
 --
 -- Name: db_info_pkey; Type: CONSTRAINT; Schema: public; Owner: pprime; Tablespace: 

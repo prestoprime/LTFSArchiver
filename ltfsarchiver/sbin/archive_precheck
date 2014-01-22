@@ -1,7 +1,6 @@
 #!/bin/bash
-
 #  PrestoPRIME  LTFSArchiver
-#  Version: 1.0 Beta
+#  Version: 1.3
 #  Authors: L. Savio, L. Boch, R. Borgotallo
 #
 #  Copyritght (C) 2011-2012 RAI – Radiotelevisione Italiana <cr_segreteria@rai.it>
@@ -23,49 +22,52 @@
 #################################################
 ##########	MAIN
 #################################################
-
-#	ricevo:
+#	incoming parms:
 #		UUID
-#	mi servono:
-#		file/dir
-#		oggetto sorgente
-#		lista dei checksum
+#	info needed
+#		source path
+#		if it is a file/dir
+#		checksum list
 #
 CFG_FILE=`dirname $0`/../conf/ltfsarchiver.conf
 . $CFG_FILE
 . $LTFSARCHIVER_HOME/sbin/common.sh
 WORKING_UUID=$1
+nowtime=`date '+%Y-%m-%d %H:%M:%S'`
+#	Task starting time
+$CMD_DB "update requests set starttime='$nowtime' where id=$1;" >/dev/null 2>&1
 MAIN_LOG_FILE=$LTFSARCHIVER_LOGDIR/`basename $0`.$WORKING_UUID.log
+#	getting info
 UUID_FILETYPE=`$CMD_DB "select datatype from requests where uuid='$WORKING_UUID';" | tr -d ' '`
 UUID_CHECKSUMFILE=`$CMD_DB"select checksumfile from requests where uuid='$WORKING_UUID'" | sed -e 's/^[ \t]*//'`
-UUID_DATA_SOURCE=`$CMD_DB"select sourcefile from requests where uuid='$WORKING_UUID'" | sed -e 's/^[ \t]*//'`
-TxtOutput=$LTFSARCHIVER_HOME/reportfiles/$WORKING_UUID.txt
-JsonOutput=$LTFSARCHIVER_HOME/reportfiles/$WORKING_UUID.json
-XmlOutput=$LTFSARCHIVER_HOME/reportfiles/$WORKING_UUID.xml
-GOODJOB="Y"
+UUID_DATA_SOURCE="`$CMD_DB"select sourcefile from requests where uuid='$WORKING_UUID'" | sed -e 's/^[ \t]*//'`"
+#	Let's suppose that all will be allright	
+GOODJOB=true
+#	Create filelist according to checksum file supplied
+#	Count files found on disk
 case  $UUID_FILETYPE in
 	"D"|"d")
-		grep -v '^#' "$UUID_CHECKSUMFILE" | sed -re '/\*lto/s;\*lto.*:.*:.{36};\*'`dirname "$UUID_DATA_SOURCE"`';' > /tmp/$WORKING_UUID.checksumsupplied.txt
-		FOUNDFILENUMBER=`find $UUID_DATA_SOURCE -type f | wc -l`
-		fileodir="WriteFolder"
+		grep -v '^#' "$UUID_CHECKSUMFILE" | sed -re '/\*lto/s;\*lto.*:.*:.{36};\*'`dirname "${UUID_DATA_SOURCE}"`';' > /tmp/$WORKING_UUID.checksumsupplied.txt
+		FOUNDFILENUMBER=`find "${UUID_DATA_SOURCE}" -type f | wc -l`
 	;;
 	"F"|"f")
-		grep -v '^#' "$UUID_CHECKSUMFILE" | sed -e 's;\*.*;\*'$UUID_DATA_SOURCE';' > /tmp/$WORKING_UUID.checksumsupplied.txt
+		grep -v '^#' "$UUID_CHECKSUMFILE" | sed -e 's;\*.*;\*'"${UUID_DATA_SOURCE}"';' > /tmp/$WORKING_UUID.checksumsupplied.txt
 		FOUNDFILENUMBER=1
-		fileodir="WriteFile"
 	;;
 esac
+#	How many files (and checksum) have been supplied through checksum file?
 SUPPLIEDFILENUMBER=`wc -l /tmp/$WORKING_UUID.checksumsupplied.txt | cut -d ' ' -f 1`
+#	Now... Check if numbers match and
 MISSINGFILE=0
-#	Se gia' ho due numeri diversi esco
+#	Bad news... number son't match :-(
 if [ $SUPPLIEDFILENUMBER -ne $FOUNDFILENUMBER ]; then
-	#	Scrivo i report
+	#	Create report and send to falout
 	main_logger 0 "Precheck control failed ($SUPPLIEDFILENUMBER supplied, $FOUNDFILENUMBER found)"
 	fallout_uuid $WORKING_UUID 109
-	GOODJOB="N"
-	#	mando in fallout
+	create_fallout_report $WORKING_UUID "W"
+	GOODJOB=false
 else
-	#per ognuno dei checksum passati DEVE esister il relativo 
+	#	Check existnce of all listed files
 	for ((LINENUM=1;$LINENUM<=$SUPPLIEDFILENUMBER;LINENUM++)); do
 		temp=( `head -$LINENUM /tmp/$WORKING_UUID.checksumsupplied.txt | tail -1 | sed -e 's/^.*\*//'` )
 		#       Nome file e checksum passati
@@ -77,24 +79,17 @@ else
 		fi
 	done
 	main_logger 0 "---------------> MISSINGFILE="$MISSINGFILE
+	#	Oops. some file seem to be missing: fallout
 	if [ $MISSINGFILE -gt 0 ]; then
 		main_logger 0 "Precheck control failed ($MISSINGFILE missing files)"
 		fallout_uuid $WORKING_UUID 110
-		GOODJOB="N"
+		create_fallout_report $WORKING_UUID "W"
+		GOODJOB=false
 	fi
 fi
-if [ $GOODJOB == "N" ]; then
-	badrequest_message=`$CMD_DB"select errordescription from requests where uuid='"$WORKING_UUID"';"`
-	echo -e '{"jobid":"'$WORKING_UUID'",' > $JsonOutput
-	echo -e '"service":"WriteToLTO",'"\n"'"command":"'$fileodir'",'"\n"'"exitcode":"400",' >> $JsonOutput
-	echo -e '"message":"'"$badrequest_message"'"}' >> $JsonOutput
-
-	echo -e '<LTFSArchiver jobid="'$WORKING_UUID'" command="'$fileodir'" exitcode="400">' > $XmlOutput
-	echo '<message>'"$badrequest_message"'</message></LTFSArchiver>' >> $XmlOutput
-
-	echo -e "400\tbad_request\t$badrequest_message" > $TxtOutput
-else
-	#	forward a status 6
+#	OK, checks passed, lets forward task
+if $GOODJOB ; then
 	update_uuid_status $WORKING_UUID 6
 fi
+#	remove temp files
 [ -f  /tmp/$WORKING_UUID.checksumsupplied.txt ] && rm -f  /tmp/$WORKING_UUID.checksumsupplied.txt

@@ -1,0 +1,88 @@
+#!/bin/bash
+
+#  PrestoPRIME  LTFSArchiver
+#  Version: 1.3
+#  Authors: L. Savio, L. Boch, R. Borgotallo
+#
+#  Copyritght (C) 2011-2012 RAI – Radiotelevisione Italiana <cr_segreteria@rai.it>
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU Affero General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU Affero General Public License for more details.
+#
+# You should have received a copy of the GNU Affero General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+############################################################################################
+#	Incoming parms:
+#       $1 = Path to log file
+#       $2 = Task UUID
+#########################
+#############   MAIN MAIN MAIN
+CFG_FILE=`dirname $0`/../conf/ltfsarchiver.conf
+. $CFG_FILE
+. $LTFSARCHIVER_HOME/sbin/common.sh
+###############################
+PARMSN=$#
+PARMSS=( $@ )
+MAIN_LOG_FILE=${PARMSS[0]}
+WORKING_UUID=${PARMSS[1]}
+#	Path to the XML tempfile to be created
+FLOCATFILE=/tmp/${WORKING_UUID}.output.xml
+TMPOUTPUT=/tmp/${WORKING_UUID}.uuidlist.xml
+XSLFILE="$LTFSARCHIVER_HOME/stylesheets/flocatall.xsl"
+[ -f ${FLOCATFILE} ] && rm -f ${FLOCATFILE}
+
+#       reading label and device from DB
+WORKING_PARMS=( `$CMD_DB" select ltotape, device from requests where uuid='$WORKING_UUID';" | tr -d ' ' | tr '|' ' ' ` )
+#	The tape is ltfsmounted her:
+SOURCEFS=/mnt/ltfs`basename ${WORKING_PARMS[1]}`
+#	forward substatus tu RUNNING
+update_uuid_status $WORKING_UUID 50
+#	looping thorugh the first level directories on the tape (each one represents an archive task)
+for ARCHIVED_ID in `find $SOURCEFS -maxdepth 1 -mindepth 1 -type d -printf '%f\n'`; do
+	#	If an XML list file is contained in it, it has to be parsed into a temp valid XML fila (with namespaces)
+	#		Finally, the tempfile is processed by xsltproc to extract <FLocat> nodes
+	#		xsltproc is appended to FLocat temporary file
+	#	If there's no XML listfile, each file and directory is processed to determine:
+	#		FLocat
+	#		Size
+	#		LasMod datetime
+	#		A new FLocat node will be created and appended to FLocat temporary file
+	if [ -f $SOURCEFS/$ARCHIVED_ID/$ARCHIVED_ID.xml ]; then
+		echo '<temp '${LTFSARCHIVER_NAMESPACE}'>' > $TMPOUTPUT
+		cat $SOURCEFS/$ARCHIVED_ID/$ARCHIVED_ID.xml >> $TMPOUTPUT
+		echo '</temp>' >> $TMPOUTPUT
+		$CMD_XSL $XSLFILE $TMPOUTPUT | sed -e 's;'"${LTFSARCHIVER_NAMESPACE}"';;g' -e 's;<FLocat;\n<FLocat;g' >> $FLOCATFILE
+	else
+		#	looping thorugh direcory content)
+		IFS=$'\n'
+		for ARCHIVED_FILE in `find $SOURCEFS/$ARCHIVED_ID  -printf '%P\n'`; do
+			FILEFLOCAT='lto-ltfs:'${WORKING_PARMS[0]}':'$ARCHIVED_ID'/'"${ARCHIVED_FILE}"
+			#	If the item is a directory, no modified datetime will be reported; size is zero
+			#	If the item is a file, modified datetime and size will be reported
+			if [ -d ${SOURCEFS}/${ARCHIVED_ID}/"${ARCHIVED_FILE}" ]; then
+				echo -e "\t\t\t"'<FLocat xlink:href="'$FILEFLOCAT'" size="0" />' >>$FLOCATFILE
+			else
+				FILESIZE=`du -ksb ${SOURCEFS}/${ARCHIVED_ID}/"${ARCHIVED_FILE}" | awk '{print $1}'`
+				FILEDATE=`stat ${SOURCEFS}/${ARCHIVED_ID}/"${ARCHIVED_FILE}" -c %y | sed -e 's/\..*//' | tr ' ' 'T'`
+				echo -e "\t\t\t"'<FLocat xlink:href="'$FILEFLOCAT'" size="'$FILESIZE'" lastModified="'$FILEDATE'"/>' >>$FLOCATFILE
+			fi
+		done
+		unset IFS
+	fi
+done
+#	forward task to complted status
+update_uuid_status $WORKING_UUID 60
+#	Creates reportfile
+create_success_report $WORKING_UUID "L"
+#	Removing temporary files
+[ -f $FLOCATFILE ] && rm -f $FLOCATFILE
+[ -f $TMPOUTPUT ] && rm -f $TMPOUTPUT
+#       FS Unmount (eject and/or unload will be managed by tap_agent)
+umount $SOURCEFS

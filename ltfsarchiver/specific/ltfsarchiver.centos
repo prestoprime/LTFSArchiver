@@ -1,6 +1,6 @@
 #!/bin/bash
 #  PrestoPRIME  LTFSArchiver
-#  Version: 1.0 Beta
+#  Version: 1.3
 #  Authors: L. Savio, L. Boch, R. Borgotallo
 #
 #  Copyritght (C) 2011-2012 RAI âadiotelevisione Italiana <cr_segreteria@rai.it>
@@ -34,7 +34,7 @@ start()
 {
 # Start daemons.
 echo -n $"Starting $prog: "
-/opt/ltfsarchiver/sbin/$prog >/dev/null 2>&1 &
+_LTFSARCHIVER_HOME_/sbin/$prog >/dev/null 2>&1 &
 #/opt/ltfsarchiver/sbin/$prog >>/opt/ltfsarchiver/logs/stardebug.txt
 RETVAL=$?
 if [ $RETVAL -eq 0 ]; then

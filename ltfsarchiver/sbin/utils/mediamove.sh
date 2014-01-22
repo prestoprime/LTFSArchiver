@@ -1,5 +1,5 @@
 #  PrestoPRIME  LTFSArchiver
-#  Version: 0.9 Beta
+#  Version: 1.3
 #  Authors: L. Savio, L. Boch, R. Borgotallo
 #
 #  Copyritght (C) 2011-2012 RAI – Radiotelevisione Italiana <cr_segreteria@rai.it>
@@ -18,20 +18,22 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 #-------------------------------------------------------------------------------
-#	Funzioni di mount e dismount nastri
+#	Load/Unload functions for tapelibrary(ies)
 function load_tape()
 {
-#	Mi arrivano:
-#		$1 devicename della libreria
-#		$2 devicename del driver
-#		$3 label del nastro da montare
-#	remap del tapedevice su numero di DTE
-if [ $1 == "NONE" ]; then	#	se la libreria e' NONE significa che e' un tape esterno... metto a Yes l'ok alla movimentazione
+#	Incoming parms:
+#		$1 tapelibrary devicename
+#		$2 ltodrive devicename
+#		$3 tapelabel to be loaded
+#	step1: determine the DTE id of the ltodriver
+#		issued only if library is NON "NONE"
+#		If library is "NONE" the tape is supposed to be manually loaded
+if [ $1 == "NONE" ]; then
 	LOAD_RC=0
 else
 	main_logger 3 "converting dev id $2 in DTE id"
 	convert_dev_to_dte $2
-	#	localizzo il tape 
+	#	tape location
 	SRC_SLOT=$( locate_tape $1 $3 )
 	if [ -z $SRC_SLOT ]; then
 		main_logger 0 "Oops: $3 was not found"
@@ -46,22 +48,20 @@ else
 		main_logger 4 "LOAD_RC returned value: $LOAD_RC"
 	fi
 fi
-#	A mano o con robot, DOVREBBE essere stato inserito... 
+#	If the tape is loaded...check status
 if [ $LOAD_RC == 0 ]; then
 	main_logger 2 "$3 loaded succesfully"
-	#	controllo status
 	get_tape_status $2
 	main_logger 4 "TAPE_STATUS_RC returned value: $TAPE_STATUS_RC"
-	#	Se ritorna OK,
-	#	altrimenti smonto e mando in fallout
+	#	if OK status is returned go on, otherwise unload and give up
 	if [ $TAPE_STATUS_RC == 0 ]; then
 		LOAD_OK="Y"
 	else
-		main_logger 0 "Tape status error after load: RC=$TAPE_STATUS_RC (Tape is $TAPE_STATUS_MSG)... following instances will be sent to fallout"
-		FALLOUT_CODE=303
-		#	EJECT o unload a seconda che sia interno o esterno
+		main_logger 0 "Tape status error after load: RC=$TAPE_STATUS_RC (Tape is $TAPE_STATUS_MSG)... following instances will be sent to fallout"	
+		FALLOUT_CODE=306
+		#	EJECT o unload according to driver type (external or internal)
 		if [ $1 == "NONE" ]; then
-			#	faccio solo eject
+			#	EJECT only
 			$CMD_MT -f $2 eject
 			if [ $? != 0 ]; then
 				main_logger 0 "CRITICAL ERROR while ejecting $3"
@@ -69,7 +69,7 @@ if [ $LOAD_RC == 0 ]; then
 			fi
 			LOAD_OK="N"
 		else
-			#	SMONTO
+			#	UNLOAD
 			$CMD_MTX -f $1 unload $SRC_SLOT $DTE_SLOT >>$MAIN_LOG_ERR 2>&1
 			if [ $? != 0 ]; then
 				main_logger 0 "CRITICAL ERROR while returning $3 to storage slot $SRC_SLOT"
@@ -79,7 +79,7 @@ if [ $LOAD_RC == 0 ]; then
 		fi
 	fi
 else
-	#	l'errore di movimentazione ha senso solo se a farlo e' stato il robot
+	#	Failure of unload command has to be fired only if the tape was internal
 	if [ $1 != "NONE" ]; then
 		main_logger 0 "Error while moving tape to DTE... following instances will be sent to fallout"
 		LOAD_OK="N"
@@ -89,25 +89,28 @@ fi
 }
 
 function unload_tape()
-#	Mi arrivano:
-#		$1 devicename della libreria
-#		$2 devicename del driver
-#	remap del tapedevice su numero di DTE
 {
-#	finche' esiste un lock aspetto
+#	Incoming parms:
+#		$1 tapelibrary devicename
+#		$2 ltodrive devicename
+#	some mtx command is already running? If so, wait
 while [ -f $LTFSARCHIVER_LOGDIR/mtx.lock ]; do
 	main_logger 1 "waiting for mtx availability"
 	sleep 1
 done
-#	blocco eventuali altre chiamate fino a che non ho scaricato
+#	My turn to execute mtx. I put a lock
 touch $LTFSARCHIVER_LOGDIR/mtx.lock
+#	Determining DTE # from device
 convert_dev_to_dte $2
+#	Destination slot (the first free one)
 TRG_SLOT=$( locate_slot $1 )
+#	It shoulb be at least one, but if not...
 if [ -z $TRG_SLOT ]; then
 	UNLOAD_RC=16
 	UNLOAD_ERROR="Unable to find a free slot to move the tape"
 else
-	for ((attempt=1; attempt<6; attemp++)); do
+	#	Looping on unload command for a maximum of 5 times
+	for ((attempt=1; attempt<6; attempt++)); do
 		$CMD_MTX -f $1 unload $TRG_SLOT $DTE_SLOT >>$MAIN_LOG_ERR 2>&1
 		UNLOAD_RC=$?
 		main_logger 4 "unload attempt $attempt: UNLOAD_RC returned value: $UNLOAD_RC"
@@ -121,6 +124,6 @@ else
 		fi
 	done
 fi
-#	rimuovo blocco mtx
+#	ok, lock removing
 rm -f $LTFSARCHIVER_LOGDIR/mtx.lock
 }

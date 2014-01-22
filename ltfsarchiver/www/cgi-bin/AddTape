@@ -1,0 +1,129 @@
+#!/bin/bash
+#  PrestoPRIME  LTFSArchiver
+#  Version: 1.3
+#  Authors: L. Savio, L. Boch, R. Borgotallo
+#
+#  Copyritght (C) 2011-2012 RAI – Radiotelevisione Italiana <cr_segreteria@rai.it>
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU Affero General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU Affero General Public License for more details.
+#
+# You should have received a copy of the GNU Affero General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
+function Add
+{
+#	insert nelle tabelle
+#	insert 1: metto label su lto_info
+$CMD_DB" insert into lto_info (label,free,booked,poolname,lastupdate) VALUES ('$ltolabel',0,0,'$poolname','$callingtime')" >/dev/null 2>&1
+RC=$?
+if [ $RC == 0 ]; then
+#	Eseguo il backup del DB
+	bkpltoinfo
+	#	Genero taskid e salvo su db
+	taskid=`uuidgen`
+	$CMD_DB" insert into requests (callingtime,uuid,ltotape,operation,manager,status,substatus,sourcefile,poolname) \
+	VALUES('$callingtime','$taskid','$ltolabel','$ACTION','$LTFSARCHIVER_MODE','waiting',0,'none','$poolname');" >/dev/null 2>&1
+	RC=$?
+	if [ $RC == 0 ]; then
+		exitcode="200"
+		XMLOUTPUT="\t"'<Output>'"\n"
+		XMLOUTPUT=$XMLOUTPUT"\t\t"'<Task id="'$taskid'" status="waiting"/>'"\n"
+		XMLOUTPUT=$XMLOUTPUT"\t"'</Output>'
+	else
+		exitcode="500"; message="Error occurred while inserting task"
+	fi
+else
+	exitcode="500"; message="Error occurred while inserting tape"
+fi
+}
+################################################################################
+# Script starts here
+. $CFGFILE
+. `dirname $0`/common.sh
+command=`basename $0`
+PARM=$QUERY_STRING
+RECEIVEDTIME=`date +'%Y-%m-%dT%H:%M:%S'`
+VALIDPARMS="TapeID|PoolName|Format|FromGUI|Output"
+output=$( get_parameter Output )
+normalize_output
+get_supplied_parameters
+ltolabel=$( get_parameter TapeID )
+poolname=$( get_parameter PoolName )
+format=$( get_parameter Format )
+guicall=$( get_parameter FromGUI )
+callingtime=`date '+%Y-%m-%d %H:%M:%S'`
+if [ -z $output ]; then
+	output=`echo $LTFSARCHIVER_OUTPUT | tr '[A-Z]' ' [a-z]'`
+	PARM=$PARM'&Output='$output
+fi
+[ -z $guicall ] && guicall=false
+if ! [ -z "$BADPARMS" ]; then
+	exitcode="400"; message="${BADPARMS}"
+else
+	#	Valori di default per poolname e formattazione
+	if [ -z "$poolname" ]; then
+		poolname=$LTFSARCHIVER_DEFPOOL
+		PARM=$PARM'&PoolName='$poolname
+	fi
+	#	Tipi di formattazione
+	if [ -z $format ]; then
+		format="N"
+		PARM=$PARM'&Format='$format
+	fi
+	GOON=true
+	case $format in
+		"Y")	#	Se e' da formattare inserisco la richiesta di formattazione
+			ACTION="F"
+		;;
+		"F")	#	Se e' da formattare CON FORCE inserisco la richiesta di formattazione FORZATA
+			ACTION="Z"
+		;;
+		"N")	#	Se non e' da formattare inserisco la richiesta di ceckspace 
+			ACTION="C"
+		;;
+		*)	#	Se non e' da formattare inserisco la richiesta di ceckspace 
+			exitcode="400"; message="Format option: $format is not valid (can only be: N|Y|F)"
+			GOON=false
+		;;
+	esac
+	if ( $GOON  && [ -z $ltolabel ] ); then
+		exitcode="400"; message='TapeID not supplied'
+		GOON=false
+	fi
+	#	Label  (max 8 e alphanum)
+	if ( $GOON && ! $( check_alphanum $ltolabel 8 ) ); then
+		exitcode="400"; message='TapeID: '$ltolabel' is too long or contains invalid characters'
+		GOON=false
+	fi
+	#	Poolname  (max 16 e alphanum)
+	if ( $GOON && ! $( check_alphanum $poolname 16 ) ); then
+		exitcode="400"; message='PoolName: '$poolname' is too long or contains invalid characters'
+		GOON=false
+	fi
+	#	Label riservata
+	if ( $GOON && [ $ltolabel == $LTFSARCHIVER_LOCK_LABEL ] ); then
+		exitcode="400"; message=$ltolabel' is a reserved value'
+		GOON=false
+	fi
+	if $GOON ; then
+		cercatape $ltolabel
+		if [ $trovato -gt 0 ]; then
+			exitcode="400"; message='TapeID '$ltolabel' is already in use'
+			GOON=false
+		fi
+	fi
+	if $GOON ; then
+		Add
+	fi
+fi
+crea_xml_answer
+#	Output
+send_output

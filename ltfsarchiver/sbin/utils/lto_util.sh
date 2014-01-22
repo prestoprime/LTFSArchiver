@@ -1,5 +1,5 @@
 #  PrestoPRIME  LTFSArchiver
-#  Version: 0.9 Beta
+#  Version: 1.3
 #  Authors: L. Savio, L. Boch, R. Borgotallo
 #
 #  Copyritght (C) 2011-2012 RAI – Radiotelevisione Italiana <cr_segreteria@rai.it>
@@ -19,6 +19,7 @@
 
 function get_tape_status()
 {
+#	function called after physical load, I have to be sure that status is "41010000" (unprotected, BOT)
 TENTATIVO=0
 while [ $TENTATIVO -le 5 ]; do
 	TAPESTATUS=( `$CMD_MT -f $1 status |grep -E "General|Density" | sed -e 's/.*code//' -e 's/(no.*//' -e 's/ (de.*//'| sed '/General/s/[^0-9]*//g' |  tr -d ' ' | tr '\n' ' '` )
@@ -26,11 +27,11 @@ while [ $TENTATIVO -le 5 ]; do
 	[ $LTFSARCHIVER_DEBUG == 1 ] && $CMD_MT -f $1 status 
 	case ${TAPESTATUS[1]} in
 		"41010000")
-			#	ok
+			#	ok, loaded and ready
 			TAPE_STATUS_RC=0
 			TAPE_STATUS_MSG="ready"
 			TENTATIVO=5
-			#	se OK, leggo density code
+			#	let's see density code and try to match with allowed ones
 			DENSITY_IDX=0
 			if [ -z ${TAPESTATUS[0]} ]; then
 				unset TAPE_STATUS_TYPE
@@ -38,6 +39,7 @@ while [ $TENTATIVO -le 5 ]; do
 				while [ $DENSITY_IDX -lt ${#LTO_ALLOWED_CODES[@]} ]; do
 					if [ ${TAPESTATUS[0]} == ${LTO_ALLOWED_CODES[$DENSITY_IDX]} ]; then
 						TAPE_STATUS_TYPE=${LTO_ALLOWED_TYPES[$DENSITY_IDX]}
+						#	Setting watermark (will be used for write batch(es))
 						TAPE_WATERMARK=${LTO_WATERMARK[$DENSITY_IDX]}
 						DENSITY_IDX=${#LTO_ALLOWED_CODES[@]}
 					fi
@@ -47,10 +49,11 @@ while [ $TENTATIVO -le 5 ]; do
 				TAPE_STATUS_RC=32
 				TAPE_STATUS_MSG=" unsupported type (density code: ${TAPESTATUS[0]})"
 			fi
-			#	test per simulare errore
+			#	test to simulate a wrong density code
 			#TAPE_STATUS_RC=32
 			#TAPE_STATUS_MSG="fake error"
 		;;
+		#	Known status...
 		"10000")
 			TAPE_STATUS_RC=1
 			TAPE_STATUS_MSG=" positioning"
@@ -67,6 +70,7 @@ while [ $TENTATIVO -le 5 ]; do
 			TAPE_STATUS_RC=8
 			TAPE_STATUS_MSG=" protected - ejecting"
 		;;
+		#	Other status...
 		*)
 			TAPE_STATUS_RC=16
 			TAPE_STATUS_MSG=" unknown status: ${TAPESTATUS[1]}"

@@ -1,7 +1,7 @@
 #!/bin/bash
 
 #  PrestoPRIME  LTFSArchiver
-#  Version: 0.9 Beta
+#  Version: 1.3
 #  Authors: L. Savio, L. Boch, R. Borgotallo
 #
 #  Copyritght (C) 2011-2012 RAI âadiotelevisione Italiana <cr_segreteria@rai.it>
@@ -23,33 +23,15 @@ function PrintConf
 {
 echo $@  >> $PRINTOUT
 }
-function tape_map_centos ()
-{
-LTOTAPEID=0
-IBMTAPEID=0
-for ((GTX=0; GTX<${#GENERIC_TAPE_ARRAY[@]}; GTX++)); do
-	VENDOR=`awk 'NR=='''\`echo "${GENERIC_TAPE_ARRAY[$GTX]:7} + 1" | bc\`''' {print $1}' /proc/scsi/sg/device_strs | tr [A-Z] [a-z]`
-	case $VENDOR in
-		"hp")
-			GEN_BACKEND_ARRAY=( "${GEN_BACKEND_ARRAY[@]}" "/dev/st$LTOTAPEID" "ltotape" )
-			TEMP_TAPE_MAP=( "${TEMP_TAPE_MAP[@]}" "n" "${GENERIC_TAPE_ARRAY[$GTX]}" "/dev/st$LTOTAPEID" )
-			let LTOTAPEID+=1
-		;;
-		"ibm")
-			GEN_BACKEND_ARRAY=( "${GEN_BACKEND_ARRAY[@]}" "/dev/IBMtape$IBMTAPEID" "ibmtape" )
-			TEMP_TAPE_MAP=( "${TEMP_TAPE_MAP[@]}" "n" "${GENERIC_TAPE_ARRAY[$GTX]}" "/dev/IBMtape$IBMTAPEID" )
-			let IBMTAPEID+=1
-			#	Devo incrementare anche il "counter" degli ltotape
-			let LTOTAPEID+=1
-		;;
-	esac
-done
-}
-function tape_map_ubuntu ()
+function tape_map()
 {
 TAPEID=0
 for ((GTX=0; GTX<${#GENERIC_TAPE_ARRAY[@]}; GTX++)); do
 	VENDOR=`awk 'NR=='''\`echo "${GENERIC_TAPE_ARRAY[$GTX]:7} + 1" | bc\`''' {print $1}' /proc/scsi/sg/device_strs | tr [A-Z] [a-z]`
+	#	assignind device name and backend value according to LTO vendor
+	#	IBM uses /dev/IBMtapeX for devices and ibmtape as backend
+	#	HP uses /dev/stX for devices and ltotape as backend
+	#		NB!!! further tests needed for different vendors.!!!
 	case $VENDOR in
 		"hp")
 			GEN_BACKEND_ARRAY=( "${GEN_BACKEND_ARRAY[@]}" "/dev/st$TAPEID" "ltotape" )
@@ -92,9 +74,19 @@ if [ -z $SG_MAP ]; then
 	echo "sg_map command not found"
 	exit 3
 fi
+MTX_LINFO=`which loaderinfo`
+if [ -z $MTX_LINFO ]; then
+	echo "loaderinfo command not found"
+	exit 3
+fi
+MTX_TINFO=`which tapeinfo`
+if [ -z $MTX_TINFO ]; then
+	echo "tapeinfo command not found"
+	exit 3
+fi
 [ -f $PRINTOUT ] && rm -f $PRINTOUT
 #################### LOADER(S) CONFIGURATION
-#       Array con le librerie
+#       loader scsi generic array
 echo "Step 1: Media changers"
 GENERIC_LIBRARY_ARRAY=( `$SG_MAP -x | awk '$6==8{print $1}' | tr '\n' ' '` )
 echo "Media changer(s) found: ${#GENERIC_LIBRARY_ARRAY[@]}"
@@ -102,15 +94,19 @@ if [ ${#GENERIC_LIBRARY_ARRAY[@]} -gt 0 ]; then
 	unset GEN_CHANGER_DEVICES
 	unset GEN_CHANNGER_SLOTS
 	unset GEN_TAPER_SLOTS
+	#	Getting info about library(ies)
 	for ((GLX=0; GLS<${#GENERIC_LIBRARY_ARRAY[@]}; GLS++)); do
+		#	vendor
 		VENDOR=`awk 'NR=='''\`echo "${GENERIC_LIBRARY_ARRAY[$GLX]:7} + 1" | bc\`''' {print $1}' /proc/scsi/sg/device_strs | tr [A-Z] [a-z]`
+		#	CHANGER array feeding with /dev/sgX devices
 		GEN_CHANGER_DEVICES=( "${GEN_CHANGER_DEVICES[@]}" /dev/sg${GENERIC_LIBRARY_ARRAY[$GLX]:7} )
-		#	Driver e slot
-		GEN_CHANGER_SLOTS=( "${GEN_CHANGER_SLOTS[@]}" `loaderinfo -f /dev/sg${GENERIC_LIBRARY_ARRAY[$GLX]:7} | grep "Number of Storage Elements:" | awk '{print $NF}'` )
-		GEN_CHANGER_TAPES=( "${GEN_CHANGER_TAPES[@]}" `loaderinfo -f /dev/sg${GENERIC_LIBRARY_ARRAY[$GLX]:7} | grep "Number of Data Transfer Elements:" | awk '{print $NF}'` )
+		#	CHANGER_SLOT array feeding with Storage Elements #
+		GEN_CHANGER_SLOTS=( "${GEN_CHANGER_SLOTS[@]}" `$MTX_LINFO -f /dev/sg${GENERIC_LIBRARY_ARRAY[$GLX]:7} | grep "Number of Storage Elements:" | awk '{print $NF}'` )
+		#	CHANGER_TAPE array feeding with Data Transfer Elements #
+		GEN_CHANGER_TAPES=( "${GEN_CHANGER_TAPES[@]}" `$MTX_LINFO -f /dev/sg${GENERIC_LIBRARY_ARRAY[$GLX]:7} | grep "Number of Data Transfer Elements:" | awk '{print $NF}'` )
 		echo "scsi device /dev/sg${GENERIC_LIBRARY_ARRAY[$GLX]:7} appears to be a library"
 	done
-	#--------- printout
+	#--------- printout of data
 	PrintConf "CONF_CHANGER_DEVICES=( "${GEN_CHANGER_DEVICES[@]}" )"
 	PrintConf "CONF_CHANGER_SLOTS=( "${GEN_CHANGER_SLOTS[@]}" )"
 	PrintConf "CONF_CHANGER_TAPES=( "${GEN_CHANGER_TAPES[@]}" )"
@@ -123,55 +119,44 @@ echo "Tape device(s) found: ${#GENERIC_TAPE_ARRAY[@]}"
 if [ ${#GENERIC_TAPE_ARRAY[@]} -gt 0 ]; then
 	unset GEN_BACKEND_ARRAY
 	unset TEMP_TAPE_MAP
-	case $OS in
-		"centos")
-			tape_map_ubuntu
-			#tape_map_centos
-		;;
-		"ubuntu")
-			tape_map_ubuntu
-		;;
-	esac
-	#--------- printout
+	tape_map
+	#--------- printout of data
 	PrintConf "CONF_BACKENDS=( "${GEN_BACKEND_ARRAY[@]}" )"
 	########### ACCOPPIAMENTI ##########################################
 	echo "Step 3: Changers/Tape associations"
 	for ((LIDX=0; LIDX<${#GEN_CHANGER_DEVICES[@]}; LIDX++)); do
 		NOME_ARRAY="CONF_CHANGER_TAPEDEV_$LIDX"
 		unset TEMP_ARRAY
-		#	Tripla (HOST-CHAN-ID) della libreria
+		#	SCSI triplet (HOST-CHAN-ID) of library
 		TRIPLA=`$SG_MAP -x | grep ${GEN_CHANGER_DEVICES[$LIDX]} | awk '{print $2"-"$3"-"$4}'`
-		#echo $TRIPLA
-		#	Cerco dev/sg che abbiano la stessa tripla
+		#	looking for connected tapes having thesame triplet value
 		TRIPLE_UGUALI=( `$SG_MAP -x | awk '{print $2"-"$3"-"$4" "$1}' | grep $TRIPLA | grep -v ${GEN_CHANGER_DEVICES[$LIDX]} | sort | awk '{print $2}' | tr '\n' ' '` )
-		#TRIPLE_UGUALI=( `$SG_MAP -x | awk '{print $2"-"$3"-"$4" "$1}' | grep $TRIPLA | sort | awk '{print $2}' | tr '\n' ' '` )
-		#echo ${TRIPLE_UGUALI[@]}
 		unset TEMP_TARRAY
 		for ((TIDX=0; TIDX<${#TRIPLE_UGUALI[@]}; TIDX++)); do
-			#	Trasformo /dev/sg in /dev/st o /dev/IBMtape
+			#	Remapping generic (dev/sgX) into specific (/dev/stX o /dev/IBMtapeX)
 			for ((TEMPIDX=0; TEMPIDX<${#TEMP_TAPE_MAP[@]}; TEMPIDX+=3)); do
 				if [ ${TEMP_TAPE_MAP[$TEMPIDX+1]} == ${TRIPLE_UGUALI[$TIDX]} ]; then
 					echo "scsi device ${TEMP_TAPE_MAP[$TEMPIDX+2]} appears to be a tape owned by ${GEN_CHANGER_DEVICES[$LIDX]} media changer"
-					#	Marco come "trovato" il device in TEMP_TAPE_MAP
+					#	Setting device as "found"
 					TEMP_TAPE_MAP[$TEMPIDX]="y"
-					#	popolo temp_array
+					#	"internal" temp_array feeding
 					TEMP_TARRAY=( "${TEMP_TARRAY[@]}" "${TEMP_TAPE_MAP[$TEMPIDX+2]}" )
 				fi
 			done
 		done
-		#--------- printout
+		#--------- printout of data
 		PrintConf "$NOME_ARRAY=( "${TEMP_TARRAY[@]}" )"
 	done
 
-	########### RIMANENTI ##########################################
+	########### Remaining tapes (the ones that are not apparently into library(ies) ####################
 	echo "Step 4: Standalone tapes"
 	unset GEN_MANUAL_TAPES
 	for ((TEMPIDX=0; TEMPIDX<${#TEMP_TAPE_MAP[@]}; TEMPIDX+=3)); do
 		if [ ${TEMP_TAPE_MAP[$TEMPIDX]} == "n" ]; then
 			echo "scsi device ${TEMP_TAPE_MAP[$TEMPIDX+2]} appears to be an external tape"
-			#	Marco come "trovato" il device in TEMP_TAPE_MAP
+			#	Setting device as "found"
 			TEMP_TAPE_MAP[$TEMPIDX]="y"
-			#	popolo Array tape seterni
+			#	"external" temp_array feeding
 			GEN_MANUAL_TAPES=( "${GEN_MANUAL_TAPES[@]}" "${TEMP_TAPE_MAP[$TEMPIDX+2]}" )
 		fi
 	done
@@ -180,9 +165,8 @@ fi
 echo "File generated..."
 echo ""
 echo ""
-
-#	Verifica congruita' tra il mnumero di tape slot e tape_device delle librerie
-#		Carico il file di configurazione creato
+#	maybe a tape has been stated as "external" due to a different scsi triple
+#	even if it's actually an internal one
 . $PRINTOUT
 NUM_LIB=${#CONF_CHANGER_DEVICES[@]}
 for ((j=0;j<$NUM_LIB;j++)); do

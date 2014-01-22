@@ -1,0 +1,95 @@
+#!/bin/bash
+#  PrestoPRIME  LTFSArchiver
+#  Version: 1.3
+#  Authors: L. Savio, L. Boch, R. Borgotallo
+#
+#  Copyritght (C) 2011-2012 RAI – Radiotelevisione Italiana <cr_segreteria@rai.it>
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU Affero General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU Affero General Public License for more details.
+#
+# You should have received a copy of the GNU Affero General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
+
+function giarichiesto()
+{
+gr=`$CMD_DB "select count(*) from requests where ltotape='"$ltolabel"' and substatus<>60 and operation='U'"`
+if [ $gr == 0 ]; then
+	echo false
+else
+	echo true
+fi
+}
+
+function insert_unmakeaval()
+{
+callingtime=`date '+%Y-%m-%d %H:%M:%S'`
+$CMD_DB "INSERT INTO requests ( uuid,status,substatus,manager,operation,ltotape,sourcesize,callingtime, poolname, datatype,sourcefile) \
+	VALUES ( '$taskid','waiting',0,'$LTFSARCHIVER_MODE','U','$ltolabel',0,'$callingtime','','','none')" > /dev/null 2>&1
+RC=$?
+}
+
+
+# Script starts here
+
+. $CFGFILE
+. `dirname $0`/common.sh
+command=`basename $0`
+PARM=$QUERY_STRING
+RECEIVEDTIME=`date +'%Y-%m-%dT%H:%M:%S'`
+VALIDPARMS="TapeID|FromGUI|Output"
+output=$( get_parameter Output )
+normalize_output
+get_supplied_parameters
+guicall=$( get_parameter FromGUI )
+ltolabel=$( get_parameter TapeID )
+output=$( get_parameter Output )
+if [ -z $output ]; then
+        output=`echo $LTFSARCHIVER_OUTPUT | tr '[A-Z]' ' [a-z]'`
+        PARM=$PARM'&Output='$output
+fi
+[ -z $guicall ] && guicall="false"
+if ! [ -z "$BADPARMS" ]; then
+	exitcode="400"; message="${BADPARMS}"
+else
+	#       devo leggere la label
+	if [ -z $ltolabel ]; then
+		exitcode=400; message="TapeID not supplied"
+	else
+		esiste=`$CMD_DB" select count (*) from lto_info where label='$ltolabel';" | sed -e 's/^ *//'`
+		if [ $esiste == 0 ]; then
+			exitcode=400; message='TapeID '$ltotape' not found'
+		else
+			eavailable=( `$CMD_DB "SELECT inuse FROM lto_info WHERE label='$ltolabel';" | head -1 | tr -d ' ' | tr '|' ' '` )
+			if [ "$eavailable" == "A" ]; then
+				if $( giarichiesto ); then
+					exitcode="400"; message='There is already a pending/running MakeAvailableUnmount request forTape '$ltolabel
+				else
+					taskid=`uuidgen`
+					insert_unmakeaval
+					RC=$?
+					if [ $RC == 0 ]; then
+						#	restituisco dati
+						exitcode="200"
+						crea_xml_output
+					else
+						exitcode="500"
+						unset taskid
+					fi
+				fi
+			else
+				exitcode="400"; message='Tape '$ltolabel' is not a made available tape at time'
+			fi
+		fi
+	fi
+fi
+crea_xml_answer	
+send_output

@@ -1,0 +1,91 @@
+#!/bin/bash
+#  PrestoPRIME  LTFSArchiver
+#  Version: 1.3
+#  Authors: L. Savio, L. Boch, R. Borgotallo
+#
+#  Copyritght (C) 2011-2012 RAI – Radiotelevisione Italiana <cr_segreteria@rai.it>
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU Affero General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU Affero General Public License for more details.
+#
+# You should have received a copy of the GNU Affero General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
+function Lock
+{
+#	Genero taskid e salvo su db
+taskid=`uuidgen`
+$CMD_DB" insert into requests (callingtime,uuid,device,operation,manager,status,substatus,sourcefile,poolname) \
+VALUES('$callingtime','$taskid','$tapedevice','K','$LTFSARCHIVER_MODE','waiting',0,'none','$poolname');" >/dev/null 2>&1
+RC=$?
+if [ $RC == 0 ]; then
+	exitcode="200"
+	XMLOUTPUT="\t"'<Output>'"\n"
+	XMLOUTPUT=$XMLOUTPUT"\t\t"'<Task id="'$taskid'" status="waiting"/>'"\n"
+	XMLOUTPUT=$XMLOUTPUT"\t"'</Output>'
+else
+	exitcode="500"; message="Error occurred while inserting task"
+fi
+}
+################################################################################
+# Script starts here
+. $CFGFILE
+. `dirname $0`/common.sh
+command=`basename $0`
+PARM=$QUERY_STRING
+RECEIVEDTIME=`date +'%Y-%m-%dT%H:%M:%S'`
+VALIDPARMS="TapeDevice|FromGUI|Output"
+output=$( get_parameter Output )
+normalize_output
+get_supplied_parameters
+tapedevice=$( get_parameter TapeDevice )
+guicall=$( get_parameter FromGUI )
+callingtime=`date '+%Y-%m-%d %H:%M:%S'`
+if [ -z $output ]; then
+	output=`echo $LTFSARCHIVER_OUTPUT | tr '[A-Z]' ' [a-z]'`
+	PARM=$PARM'&Output='$output
+fi
+[ -z $guicall ] && guicall=false
+if ! [ -z "$BADPARMS" ]; then
+	exitcode="400"; message="${BADPARMS}"
+else
+	if [ -z "$tapedevice" ]; then
+		exitcode="400"; message='TapeDevice not supplied'
+	else
+		# verifico che il device sia gestito dal sistema
+		devices_list
+		deviceexists=false
+		for ((k=0;k<${#TAPE_LIST[@]};k+=2)); do
+			if [ $tapedevice == ${TAPE_LIST[$k]} ]; then
+				deviceexists=true
+			fi
+		done
+		if $deviceexists; then
+			#	C'e' gia' una richiesta pendente?
+			REQUESTED=`$CMD_DB "select count(*) from requests where operation='K' and substatus=0 and device='"$tapedevice"';"`
+			if [ $REQUESTED -gt 0 ]; then
+				exitcode=400; message="Lock of device $tapedevice has already been scheduled"
+			else
+				#	E' gia' in stato locked?
+				LOCKED=`$CMD_DB "select ltolabel from lock_table where device='"$tapedevice"';" | tr -d ' '`
+				if [ "$LOCKED" == ${LTFSARCHIVER_LOCK_LABEL} ]; then
+					exitcode=400; message="Sevice $tapedevice is already locked"
+				else
+					Lock
+				fi
+			fi
+		else
+			exitcode=400; message="TapeDevice $tapedevice does not exist"
+		fi
+	fi
+fi
+crea_xml_answer
+#	Output
+send_output

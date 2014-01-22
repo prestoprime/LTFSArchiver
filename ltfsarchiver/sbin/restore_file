@@ -1,7 +1,7 @@
 #!/bin/bash
 
 #  PrestoPRIME  LTFSArchiver
-#  Version: 1.0 Beta
+#  Version: 1.3
 #  Authors: L. Savio, L. Boch, R. Borgotallo
 #
 #  Copyritght (C) 2011-2012 RAI – Radiotelevisione Italiana <cr_segreteria@rai.it>
@@ -24,6 +24,48 @@
 #	$2 = label
 #       $3/@ = UUID
 #########################
+function create_report()
+{
+#	stylesheet to apply
+XSLFILE="$LTFSARCHIVER_HOME/stylesheets/flocat.xsl"
+#	Jus to be sure that is empty...
+unset FLOCATLIST
+#	Feeding FLOCATLIST with FLocats according to item tyee
+case $itemtype in
+	"d")		#	Directory
+		IFS=$'\n'
+		for FILE in `find $UUID_DATA_TARGET -type f`; do
+			#	This was the archive FLocat
+			FLOCATORI=`echo "$FILE" | sed -e 's;'$UUID_DATA_TARGET';'$UUID_DATA_SOURCE';'`
+			#	Copies original FLocat node  from archive file list or creates a brand new one
+			if $reportchecksums; then
+				FLOCATLIST=$FLOCATLIST`$CMD_XSL --stringparam flocat "$FLOCATORI" $XSLFILE "/tmp/"$UUID_ARCHIVED".xml" | sed -e 's/'${LTFSARCHIVER_NAMESAPCE}'//'`
+			else
+				FLOCATLIST=$FLOCATLIST"\t\t"'<FLocat xlink:href="'$FLOCATORI'"/>'
+			fi
+		done
+		unset IFS
+	;;
+	"f")	#	File
+		#	Copies original FLocat node  from archive file list or creates a brand new one
+		if $reportchecksums; then
+			FLOCATLIST=$FLOCATLIST`$CMD_XSL --stringparam flocat "$UUID_DATA_SOURCE" $XSLFILE "/tmp/"$UUID_ARCHIVED".xml" | sed -e 's/xmlns:.* xlink/xlink/'`
+		else
+			FLOCATLIST=$FLOCATLIST"\t\t"'<FLocat xlink:href="'$UUID_DATA_SOURCE'"/>'
+		fi
+	;;
+esac
+#	Removing temporary files
+[ -f "/tmp/$UUID_ARCHIVED.xml" ] && rm -f "/tmp/$UUID_ARCHIVED.xml"
+[ -f "/tmp/$WORKING_UUID.copylist" ] && rm -f "/tmp/$WORKING_UUID.copylist"
+[ -f "/tmp/$WORKING_UUID.rsync.txt" ] && rm -f "/tmp/$WORKING_UUID.rsync.txt"
+}
+
+############################################################################################
+#############   MAIN MAIN MAIN #############################################################
+#	Incomng parms:
+#	S1 = logfile
+#	$2-$n = task UUID's
 CFG_FILE=`dirname $0`/../conf/ltfsarchiver.conf
 . $CFG_FILE
 . $LTFSARCHIVER_HOME/sbin/common.sh
@@ -31,95 +73,112 @@ CFG_FILE=`dirname $0`/../conf/ltfsarchiver.conf
 PARMSN=$#
 PARMSS=( $@ )
 MAIN_LOG_FILE=${PARMSS[0]}
-#       ARRAY CON LE UUID
+#	An array with all UUIOD is created
 for ((UUID_I=1; UUID_I<$PARMSN; UUID_I++)); do
 	LISTA_UUID=( "${LISTA_UUID[@]}" ${PARMSS[$UUID_I]} )
 done
-#       Leggo i dati comuni a tutte le uuid prendendoli dalla prima
+#	Using first uuid to determine tape label and device t be used
 COMMON_PARMS=( `$CMD_DB" select ltotape, device from requests where uuid='${LISTA_UUID[0]}';" | tr -d ' ' | tr '|' ' ' ` )
+#       LTFS mount moint
 SOURCEFS=/mnt/ltfs`basename ${COMMON_PARMS[1]}`
 
-#       CICLO....
-WORKING_IDX=0
+#       Looping throiugh UUID'S
 for ((WORKING_IDX=0; WORKING_IDX<${#LISTA_UUID[@]}; WORKING_IDX++)); do
-	#       Lettura parametri
+	#       task to be satisfied
 	WORKING_UUID=${LISTA_UUID[$WORKING_IDX]}
+	#	Getting Source ad destination
 	UUID_DATA_SOURCE=`$CMD_DB"select sourcefile from requests where uuid='$WORKING_UUID'" | sed -e 's/^[ \t]*//'`
 	UUID_DATA_TARGET=`$CMD_DB"select destfile from requests where uuid='$WORKING_UUID'" | sed -e 's/^[ \t]*//'`
-	#UUID_DATA=( `$CMD_DB"select sourcefile,destfile from requests where uuid='$WORKING_UUID'" | tr -d ' ' | tr '|' ' '` )
-	main_logger 4 'UUID_DATA: SOURCE='"$UUID_DATA_SOURCE"' - TARGET='"$UUID_DATA_TARGET"
-	#	Controllo esistenza e tipologia oggetto sorgente
+	#	The UUID of the originating archive task
+	UUID_ARCHIVED=`echo  "${UUID_DATA_SOURCE}" | sed -e 's/.*\://' -e 's;/.*;;'`
+	#	sed to remap source FLocat into the coresponding physical path 
 	SPATH=$SOURCEFS/`echo  "${UUID_DATA_SOURCE}" | sed -e 's/.*\://'`
-	#	Esiste il file/path sorgente?
+	main_logger 4 'UUID_DATA: SOURCE='"$UUID_DATA_SOURCE"' - TARGET='"$UUID_DATA_TARGET"
+	#	Check if the data are actually on tape
+	#		If true, determine if it's a directory or a file
 	if [ -d "$SPATH" ] || [ -f "$SPATH" ]; then
 		[ -d "$SPATH" ] && itemtype="d"
 		[ -f "$SPATH" ] && itemtype="f"
-		#	Scrivo lo spazio su DB (mi servira' per determinare la percentuale di completamento in GetResult
+		#	Calculation of needed space to esec restore
 		NEEDEDSPACE=`du -ksm "$SPATH" | awk '{ print $1 }'`
 		NEEDEDBYTE=`du --apparent-size -ksb "$SPATH" | awk '{ print $1 }'`
+		#	Store it on request table (used from GetStatus API when calculating % of completion)
 		$CMD_DB" update requests set sourcesize=$NEEDEDSPACE, sourcebytes=$NEEDEDBYTE where uuid='$WORKING_UUID';" > /dev/null 2>&1
-		#	C'e' abbastanza spazio per il restore?
+		#	Check if the needed space is actually available
 		FREESPACE=`df -P -m \`dirname "${UUID_DATA_TARGET}"\` | tail -1 | awk '{ print $3 }'`
+		#	If there's space enaough, go on, else fallout
 		if [ $FREESPACE -ge $NEEDEDSPACE ]; then
-			#	Passo in running
+			#	Name of the XML list file stored on tape
+			XMLSAVED=$SOURCEFS"/"$UUID_ARCHIVED"/"$UUID_ARCHIVED".xml"
+			#	If this file exists a copy is made on /tmp, adding namespaces
+			#		It will be used to get original Flocat node created during archive
+			if [ -f $XMLSAVED ]; then
+				cp $XMLSAVED /tmp/`basename $XMLSAVED`
+				reportchecksums=true
+			else
+				reportchecksums=false
+			fi
+			#	Let's start with "fake" good return codes
+			STEP1_RC=0
+			STEP2_RC=0
+			#	Setting rsync log options
+			LOGOPT=" --log-file=/tmp/$WORKING_UUID.rsync.txt --log-file-format='%b|%f'"
+			#	Forwarding task to running status
 			update_uuid_status $WORKING_UUID 50
-			#	il source e' una dir o un file?
-			case $itemtype in
-				"d")	#	File: uso rsync
-					main_logger 0 "Starting restore (rsync) for uuid=$WORKING_UUID"
-					 #       Nel primo includo i file che rispettano i parametri di dimensione ed estensione dichiarati in cfg
-			                main_logger 1 "Phase 1 rsync command: $CMD_RSYNC "$SPATH"/ $UUID_DATA_TARGET $( get_rsync_rules R)"
-					main_logger 0 "Starting rsync for uuid=$WORKING_UUID - phase 1"
-					$CMD_RSYNC "$SPATH"/ $UUID_DATA_TARGET $( get_rsync_rules ) >> $MAIN_LOG_FILE
-					STEP1_RC=$?
-					if [ $STEP1_RC == 0 ]; then
-						main_logger 1 "Rsync 1st step OK"
-				                main_logger 1 "Phase 2 rsync command: $CMD_RSYNC "$SPATH"/ $UUID_DATA_TARGET"
-						main_logger 0 "Starting rsync for uuid=$WORKING_UUID - phase 2"
-						$CMD_RSYNC "$SPATH"/ $UUID_DATA_TARGET >> $MAIN_LOG_FILE
-						STEP2_RC=$?
-						if [ $STEP1_RC == 0 ]; then
-							main_logger 1 "Rsync 2nd step OK"
-						else
-							main_logger 0 "Rsync 2nd step error: $STEP1_RC"
-						fi
-					else
-						main_logger 0 "Rsync 1st step error: $STEP1_RC"
-					fi
-					COPY_RC=`echo "$STEP1_RC + $STEP2_RC" | bc`
-				;;
-				"f")	#	File: uso cp
-					main_logger 0 "Starting restore (copy) for uuid=$WORKING_UUID"
-					cp -p "$SPATH" "$UUID_DATA_TARGET"
-					RRC=$?
-					if [ $RRC == 0 ]; then
-						main_logger 1 "File copy OK"
-					else
-						main_logger 0 "File copy error: $RRC"
-					fi
-					COPY_RC=$RRC
-					sleep 10
-				;;
-			esac
-
-			#       Com'e' andata?
+			#	If the source item is a directory, a "two step rsync" will be used
+			#	If the source item is a file, a "single step rsync" will be used
+			if [ $itemtype == "f" ]; then
+				main_logger 1 "Rsync 1st step not needed"
+				STEP1_RC=0
+			else
+				#	rsync running with file/size limit specification according to LTFS ones
+				main_logger 1 "Phase 1 rsync command: $CMD_RSYNC $SPATH/ $UUID_DATA_TARGET $( get_rsync_rules ) $LOGOPT"
+				bash -c "$CMD_RSYNC \"$SPATH\"/ $UUID_DATA_TARGET $( get_rsync_rules ) $LOGOPT > /tmp/$WORKING_UUID.copylist 2>&1"
+				STEP1_RC=$?
+			fi
+			#	if first step gave a good return code (or it was not run), go on with step2
+			if [ $STEP1_RC == 0 ]; then
+				main_logger 1 "Rsync 1st step OK"
+				#       
+					main_logger 0 "Starting rsync for uuid=$WORKING_UUID - phase 2"
+				#	rsync running without any  file/size limit specification
+				if [ $itemtype == "f" ]; then
+					main_logger 1 "Phase 2 rsync command: $CMD_RSYNC $SPATH $UUID_DATA_TARGET $LOGOPT"
+					bash -c "$CMD_RSYNC \"$SPATH\" $UUID_DATA_TARGET $LOGOPT >> /tmp/$WORKING_UUID.copylist 2>&1"
+				else
+					main_logger 1 "Phase 2 rsync command: $CMD_RSYNC $SPATH/ $UUID_DATA_TARGET $LOGOPT"
+					bash -c "$CMD_RSYNC \"$SPATH\"/ $UUID_DATA_TARGET $LOGOPT >> /tmp/$WORKING_UUID.copylist 2>&1"
+				fi
+				STEP2_RC=$?
+			fi
+			#	Calculate globa return code
+			COPY_RC=`echo "$STEP1_RC + $STEP2_RC" | bc`
+			#       if Global RC was good, forward to success,otherwise fallout
 			if [ $COPY_RC == 0 ]; then
+				#	creates a report based on FlocaList
+				create_report
 				main_logger 0 "$WORKING_UUID restore complete"
+				#	forward status to complete ad create final report
 				update_uuid_status $WORKING_UUID 60
+				create_success_report $WORKING_UUID "R"
 			else
 				main_logger 0 "$WORKING_UUID is now in fallout"
+				#	sendig to fallout
 				fallout_uuid $WORKING_UUID 206
+				create_fallout_report $WORKING_UUID "R"
 			fi
 		else
-			#	vado in fallout
+			#	fallout caused by storege shortage
 			main_logger 0 "Needed space for restore: $NEEDEDSPACE MB - Free space found: $FREESPACE: $WORKING_UUID is now in fallout"
 			fallout_uuid  $WORKING_UUID 205
+			create_fallout_report $WORKING_UUID "R"
 		fi
 	else
-		#	vado in fallout
+		#	fallout caused by unexisting source data
 		main_logger 0 "flocat: $SPATH was not found: $WORKING_UUID is now in fallout"
 		fallout_uuid  $WORKING_UUID 204
+		create_fallout_report $WORKING_UUID "R"
 	fi
 done
-#       smonto il FS
+#	FS Unmount (eject and/or unload will be managed by tap_agent)
 umount $SOURCEFS

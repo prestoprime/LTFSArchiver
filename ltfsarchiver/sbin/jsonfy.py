@@ -1,10 +1,9 @@
-#!/bin/bash
-
+#!/usr/bin/env python
 #  PrestoPRIME  LTFSArchiver
 #  Version: 1.3
 #  Authors: L. Savio, L. Boch, R. Borgotallo
 #
-#  Copyritght (C) 2011-2012 RAI – Radiotelevisione Italiana <cr_segreteria@rai.it>
+#  Copyritght (C) 2011-2012 RAI âadiotelevisione Italiana <cr_segreteria@rai.it>
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU Affero General Public License as published by
@@ -18,24 +17,15 @@
 #
 # You should have received a copy of the GNU Affero General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
-
-PARMN=$#
-PARMV=( $@ )
-while [ `pidof mtx | wc -l` -gt 0 ]; do
-	echo "mtx running..."
-	sleep 1
-done
-case ${PARMV[1]} in 
-	"/dev/sgx")
-		if [ ${PARMV[2]}  == "status" ]; then
-			mtx -f /dev/changer status | sed -e 's/VolumeTag=NS/VolumeTag=XX/g' -e 's/VolumeTag = NS/VolumeTag = XX/g'
-		else
-			PARMV[1]="/dev/changer"
-			mtx ${PARMV[@]}
-		fi
-	;;
-	*)
-		
-		mtx $@
-	;;
-esac
+###############################
+import sys, xmltodict, json
+#	Firts (an unique) argument is the absolute path to XML file
+xmlin=str(sys.argv[1])
+#	Load whole file
+fileHandle = open ( xmlin, 'r' )
+xmltext = fileHandle.read()
+fileHandle.close()
+#	Parse to JSON
+jsontext = xmltodict.parse(xmltext)
+#	print it to stdout
+print json.dumps(jsontext, indent=4, separators=(',', ': '))

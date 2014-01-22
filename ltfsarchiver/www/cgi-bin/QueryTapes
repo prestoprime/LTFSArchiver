@@ -1,0 +1,196 @@
+#!/bin/bash
+#  PrestoPRIME  LTFSArchiver
+#  Version: 1.3
+#  Authors: L. Savio, L. Boch, R. Borgotallo
+#
+#  Copyritght (C) 2011-2012 RAI – Radiotelevisione Italiana <cr_segreteria@rai.it>
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU Affero General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU Affero General Public License for more details.
+#
+# You should have received a copy of the GNU Affero General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
+#	
+function check_tape_pool()	# il tape appartiene a quel pool?
+{
+QUERY="select count(*) from lto_info where poolname='$poolname' and label='$tapeid';"
+checked=false
+if [ `$CMD_DB "${QUERY}" | tr -d ' '` -gt 0 ]; then
+	checked=true
+fi
+}
+
+function list_pools()		# lista dei nomi dei pool
+{
+QUERY="select distinct poolname from lto_info order by poolname;"
+foundpools=( `$CMD_DB "${QUERY}" | tr -d ' ' | tr '\n' ' '` )
+}
+
+function list_tapes_in_pool()	# lista dei tape nel pool
+{
+QUERY="select label from lto_info where poolname='$1' order by label;"
+foundtapes=( `$CMD_DB "${QUERY}" | tr -d ' ' | tr '\n' ' '` )
+}
+
+function cerca_pool()		# verifica se il pool passato esiste
+{
+poolfound=true
+QUERY="select count(*) from lto_info where poolname='$poolname';"
+POOLTROVATO=`$CMD_DB "${QUERY}"  | tr -d ' '`
+[ $POOLTROVATO == 0 ] && poolfound=false
+}
+
+function cerca_tape()		# cerca il pool che contiene il tape
+{
+QUERY="select poolname from lto_info where label='$tapeid';"
+foundpool=( `$CMD_DB "${QUERY}" | tr -d ' ' | tr '\n' ' '` )
+}
+
+function info_tape()		# estrae le info sui tape ed accoda ad output
+{
+QUERY1="select ltotype, free, capacity from lto_info where label='$1';"
+QUERY2="select inuse from lto_info where label='$1';"
+LASTUP=`$CMD_DB "select lastupdate from lto_info where label='$1';" | sed -e 's/^ //' | tr ' ' 'T' |  sed -e 's/\+.*//'`
+TAPEDATA=( `$CMD_DB "${QUERY1}" | tr -d ' ' | tr '|' ' '` )
+case ${TAPEDATA[1]} in
+	"0")
+		WRITEMSG="false"
+	;;
+	*)
+		WRITEMSG="true"
+	;;
+esac
+TAPEUSE=`$CMD_DB "${QUERY2}" | tr -d ' ' | tr '|' ' '`
+case $TAPEUSE in
+	"F"|"Z"|"C")
+		INUSEMSG="busy for AddTape"
+	;;
+	"A"|"U")
+		INUSEMSG="busy for MakeAvailable"
+	;;
+	"W")
+		INUSEMSG="busy for WriteToLTO"
+	;;
+	"R")
+		INUSEMSG="busy for RestoreFromLTO"
+	;;
+	*)
+		INUSEMSG="idle"
+	;;
+esac
+#	<Tape tapeID sizeMB freeMB ltotype writeEnable status lastModified>
+XMLOUTPUT=$XMLOUTPUT"\t\t\t"'<Tape tapeID="'$1'" sizeMB="'${TAPEDATA[2]}'" freeMB="'${TAPEDATA[1]}'" ltotype="'${TAPEDATA[0]}'" writeEnable="'$WRITEMSG'" status="'$INUSEMSG'" lastModified="'${LASTUP}'"/>'"\n"
+}
+
+function info_pool_open
+{
+#QUERY=" select poolname, count(*) as tapes, sum(free)as total, min(free), max(free) from lto_info where free > 0"
+QUERY1=" select sum(free)as totalf, sum(capacity)as totalc, min(free), max(free) from lto_info where free > 0 and poolname='$1';"
+QUERY2=" select count(*) as tapesi from lto_info where  poolname='$1';"
+POOLDATA=( `$CMD_DB "${QUERY1}" | tr -d ' ' | tr '|' ' '` )
+POOLNTAPES=( `$CMD_DB "${QUERY2}" | tr -d ' ' | tr '|' ' '` )
+POOLDATA=( "${POOLDATA[@]}" "${POOLNTAPES}" )
+XMLOUTPUT=$XMLOUTPUT"\t\t"'<Pool poolName="'$1'" numTapes="'${POOLDATA[4]}'" totalSizeMB="'${POOLDATA[1]}'" totalFreeMB="'${POOLDATA[0]}'" ' 
+XMLOUTPUT=$XMLOUTPUT' minimumFreeMB="'${POOLDATA[2]}'" maximumFreeMB="'${POOLDATA[3]}'">'"\n"
+}
+
+
+
+function info_pool_close()
+{
+XMLOUTPUT=$XMLOUTPUT"\t\t"'</Pool>'"\n"
+}
+
+
+################################################################################
+# Script starts here
+. $CFGFILE
+. `dirname $0`/common.sh
+command=`basename $0`
+PARM=$QUERY_STRING
+RECEIVEDTIME=`date +'%Y-%m-%dT%H:%M:%S'`
+VALIDPARMS="TapeID|PoolName|FromGUI|Output"
+output=$( get_parameter Output )
+normalize_output
+get_supplied_parameters
+poolname=$( get_parameter PoolName )
+tapeid=$( get_parameter TapeID )
+guicall=$( get_parameter FromGUI )
+XMLOUTPUT="\t"'<Output>'"\n"
+exitcode="200"
+if [ -z $output ]; then
+        output=`echo $LTFSARCHIVER_OUTPUT | tr '[A-Z]' ' [a-z]'`
+        PARM=$PARM'&Output='$output
+fi
+if ! [ -z "$BADPARMS" ]; then
+        unset XMLOUTPUT; exitcode="400"; message="${BADPARMS}"
+else
+	#	parametri entrambi vuoti: tutti i tape in tutti i pool
+	if ( [ -z $poolname ] && [ -z $tapeid ] ); then
+		list_pools
+		if [ ${#foundpools[@]} == 0 ];then
+			unset XMLOUTPUT; exitcode="400"; message="No pool exists"
+		else
+			for ((pi=0;pi<${#foundpools[@]};pi++)); do
+				info_pool_open ${foundpools[$pi]}
+				list_tapes_in_pool ${foundpools[$pi]}
+				for ((ti=0;ti<${#foundtapes[@]};ti++)); do
+					info_tape ${foundtapes[$ti]}
+				done
+				info_pool_close
+			done
+		fi
+	fi
+	#	poolname vuoto e tapeid passato: cerco se esiste tape
+	#		se non esiste 404
+	#		se esiste dati pool e dati singolo tape
+	if ( [ -z $poolname ] && ! [ -z $tapeid ] ); then
+		cerca_tape
+		if [ -z $foundpool];  then
+			unset XMLOUTPUT; exitcode="404"; message="TapeID $tapeid not found"
+		else
+			info_pool_open $foundpool
+			info_tape $tapeid
+			info_pool_close
+		fi
+	fi
+	#	poolname passato e tapeid vuoto:
+	#		cerco se esiste il pool
+	#		se non esiste pool 404
+	#		se esiste dati pool e dati di tutti i tape
+	if ( ! [ -z $poolname ] && [ -z $tapeid ] ); then
+		cerca_pool
+		if $poolfound; then
+			info_pool_open $poolname
+			list_tapes_in_pool $poolname
+			for ((ti=0;ti<${#foundtapes[@]};ti++)); do
+				info_tape ${foundtapes[$ti]}
+			done
+			info_pool_close
+		else
+			unset XMLOUTPUT; exitcode="404"; message="PoolName $poolname not found"
+		fi
+	fi
+	#	poolname passato e tapeid passato:
+	if ( ! [ -z $poolname ] && ! [ -z $tapeid ] ); then
+		check_tape_pool
+		if $checked; then
+			info_pool_open $poolname
+				info_tape $tapeid
+			info_pool_close
+		else
+			unset XMLOUTPUT; exitcode="404"; message="No result found with supplied criteria"
+		fi
+	fi
+	[ -z "$XMLOUTPUT" ] || XMLOUTPUT=$XMLOUTPUT"\t"'</Output>'"\n"
+fi
+crea_xml_answer
+send_output

@@ -1,7 +1,6 @@
 #!/bin/bash
-
 #  PrestoPRIME  LTFSArchiver
-#  Version: 1.0 Beta
+#  Version: 1.3
 #  Authors: L. Savio, L. Boch, R. Borgotallo
 #
 #  Copyritght (C) 2011-2012 RAI – Radiotelevisione Italiana <cr_segreteria@rai.it>
@@ -18,177 +17,155 @@
 #
 # You should have received a copy of the GNU Affero General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
-################ INPUT PARMS
-#	$1 = device su cui e' montato LTFS
-#	$2 = LABEL (per creare flocat)
-#	$3/@ = UUID
-#########################
-#============================================================================================================================================
 ###############################
 CFG_FILE=`dirname $0`/../conf/ltfsarchiver.conf
 . $CFG_FILE
-#	Funzioni comuni
 . $LTFSARCHIVER_HOME/sbin/common.sh
 . $LTFSARCHIVER_HOME/sbin/archive_functions.sh
-#	Funzioni specifiche per gestione checksum
 . $LTFSARCHIVER_HOME/sbin/checksum_functions.sh
 ###############################
+#	Incomingg parms:
+#	$1 = logfile
+#	$2-$n = UUDIs
 PARMSN=$#
 PARMSS=( $@ )
 MAIN_LOG_FILE=${PARMSS[0]}
-#	ARRAY CON LE UUID
+#	An array with all UUIOD is created
 for ((UUID_I=1; UUID_I<$PARMSN; UUID_I++)); do
 	LISTA_UUID=( "${LISTA_UUID[@]}" ${PARMSS[$UUID_I]} )
 done
-#	Leggo i dati comuni a tutte le uuid prendendoli dalla prima
+#	Using first uuid to determine tape label and device t be used
 COMMON_PARMS=( `$CMD_DB" select ltotape, device from requests where uuid='${LISTA_UUID[0]}';" | tr -d ' ' | tr '|' ' ' ` )
-# Filesystem su cui e' montato LTO
+#	LTFS mount moint
 TARGETFS=/mnt/ltfs`basename ${COMMON_PARMS[1]}`
-# Freespace da scalare
+#	Detect LTO type to correctly set high watermark
 LTO_TYPE=( `$CMD_DB"select ltotype from lto_info where label='${COMMON_PARMS[0]}';" | tr -d ' ' | tr '|' ' ' `)
 for ((LTOTIDX=0; LTOTIDX<${#LTO_ALLOWED_TYPES[@]}; LTOTIDX++)); do
 	if [ ${LTO_ALLOWED_TYPES[$LTOTIDX]} == $LTO_TYPE ]; then
+		#	WATRMAK
 		FREE_WATERMARK=${LTO_WATERMARK[$LTOTIDX]}
+		#	Brutal exit from loop
 		LTOTIDX=${#LTO_ALLOWED_TYPES[@]}
 	fi
 done
-#	CICLO....
-#	Il CONTINUE viene eventualmente messo a NO in caso di fallout di una istanza, in modo da non proseguire. PArto con Y per tentare almeno la prima archiviazione
-CONTINUE="Y"
+#	MAIN LOOP
+#	CONTINUE is initially set tu TRUE.
+#		It will be changend to FALSE in case of fallout
+CONTINUE=true
 for ((WORKING_IDX=0; WORKING_IDX<${#LISTA_UUID[@]}; WORKING_IDX++)); do
-	#	Lettura parametri istanza
+	#	UUID of the task
 	WORKING_UUID=${LISTA_UUID[$WORKING_IDX]}
+	#	Getting parametrs to be used during archive
 	UUID_DATA=( `$CMD_DB"select datatype, sourcesize, checksum, checksumfile from requests where uuid='$WORKING_UUID'" | tr -d ' ' | tr '|' ' '` )
-	#	nome dell'operazione da segnare sul report
-	case  ${UUID_DATA[0]} in
-		"F"|"f")
-			fileodir="WriteFile"
-		;;
-		"D"|"d")
-			fileodir="WriteFolder"
-		;;
-	esac
-	if [ $CONTINUE == "Y" ]; then
-		REAL_TARGET="$TARGETFS/$WORKING_UUID"		#	VERO NOMEFINALE della DIR TARGET
-		TEMP_TARGET="$TARGETFS/temp.$WORKING_UUID"	#	NOME TEMPORANEO della DIR TARGET
+	#	If execution was not blocked by a previous task go on
+	if $CONTINUE; then
+		REAL_TARGET="$TARGETFS/$WORKING_UUID"		#	FINAL name of archiveing directory on tape
+		TEMP_TARGET="$TARGETFS/temp.$WORKING_UUID"	#	TEMP name of archiveing directory on tape
+		#	Absolute path of the item to be archived
 		UUID_DATA_SOURCE=`$CMD_DB"select sourcefile from requests where uuid='$WORKING_UUID'" | sed -e 's/^[ \t]*//'`
 		main_logger 4 "UUID_DATA: $UUID_DATA_SOURCE ${UUID_DATA[@]}"
-		#	Passo l'istanza in running e registro il FLOCAT
+		#	Store Flocat into the request table
 		FLOCAT="lto-ltfs:"${COMMON_PARMS[0]}":"$WORKING_UUID/`basename "$UUID_DATA_SOURCE"`
 		$CMD_DB" update requests set destfile='$FLOCAT' where uuid='$WORKING_UUID';" >/dev/null 2>&1
-		#	Passo l'istanza in "running"
+		#	Forward task to running status
 		update_uuid_status $WORKING_UUID 50
-		#	Verifco che sorgente esista..
+		#	lets's check if the item to be archived really exists
+		#		if true can start,
+		#		if false... sorry, fallout
 		if ( [ -d "$UUID_DATA_SOURCE" ] || [ -f "$UUID_DATA_SOURCE" ] ); then
-			START_COPY="Y"
+			START_COPY=true
 		else
-			#	Se non esiste... fallout
-			( [ ${UUID_DATA[0]} == "F" ] || [ ${UUID_DATA[0]} == "f" ] ) && fallout_uuid $WORKING_UUID 104
-			( [ ${UUID_DATA[0]} == "D" ] || [ ${UUID_DATA[0]} == "d" ] ) && fallout_uuid $WORKING_UUID 105
-			START_COPY="N"
+			#	fallout code differs if item was a file o a dir
+			( [ ${UUID_DATA[0]} == "F" ] || [ ${UUID_DATA[0]} == "f" ] ) &&	fallout_uuid $WORKING_UUID 104
+			( [ ${UUID_DATA[0]} == "D" ] || [ ${UUID_DATA[0]} == "d" ] ) &&	fallout_uuid $WORKING_UUID 105
+			create_fallout_report $WORKING_UUID "W"
+			START_COPY=false
 		fi
 		#	
-		#	copia dati
+		#	Starting data copy
+		#	Let's suppose that everything will end correctly
 		COPY_RC=0
-		if [ $START_COPY == "Y" ]; then
-			#	L'archive precedente POTREBBE aver riempito piu' del previsto:	RICONTROLLO del free space ed eventuale skip/resubmit se non sufficiente
+		if $START_COPY; then
+			#	Better recheck freespace on tape
 			ACTUAL_FREE=`$CMD_DB"select free from lto_info where label='${COMMON_PARMS[0]}'" | tr -d ' '`
 			ACTUAL_NEEDS=`du -ksm "$UUID_DATA_SOURCE" | awk '{ print $1 }'`
-			#	Se ho meno spazio del necessario...
+			#	if it's less than needed...
 			if [ $ACTUAL_FREE -lt $ACTUAL_NEEDS ]; then
-				#	REQUEUE
-				#	riaccodo la lavorazione (come un resubmit)
+				#	REQUEUE task
 				requeue_uuid
 				main_logger 0 "uuid $WORKING_UUID requeued due to real free space and needs recalculation"
 				main_logger 0 " - booked space:  ${UUID_DATA[1]} MB"; main_logger 0 " - actual space: $ACTUAL_NEEDS MB"; main_logger 0 " - actual free:  $ACTUAL_FREE MB"
 				
 			else
-				# creo la directory su LTFS
+				#	creating dest dir on tape (using temporary name)
 				[ -d $TEMP_TARGET ] || mkdir $TEMP_TARGET
 				if [ $? == 0 ]; then
-					#	Nome del file di output finale json ed xml
-					JsonOutput=$LTFSARCHIVER_HOME/reportfiles/$WORKING_UUID.json
+					#	Setting final report file name
 					XmlOutput=$LTFSARCHIVER_HOME/reportfiles/$WORKING_UUID.xml
-					TxtOutput=$LTFSARCHIVER_HOME/reportfiles/$WORKING_UUID.txt
-					#	Imposto i valori per eseguire checksuma (save, algoritmo, etc.)
+					#	setup of parameters involved into checksum management
 					checksum_config
-					#	ARCHIVIAZIONE VERA E PROPRIA
+					#	ARCHIVE CORE function
 					exec_archive
-					#	Com'e' andata?
+					#	Evaluation of final Retrun code from "exec_archive"
 					main_logger 4 "COPY_RC returned: $COPY_RC"
+					#	If RC=0 the task has to be considered succesfully completede
+					#	otherwise it will be sent to fallout status
+					#	NOTE: COPY_RC doesn't reflect checksum creation/match results. It only indicates
+					#	the COPY result.  Checksum controls will be analyzed later
 					if [ $COPY_RC == 0 ]; then
-						#	rename della cartella comunque 
-						#		(anche se ci sono dei checksum unmatched
+						#	set final name of destination directory 
 						mv $TEMP_TARGET $REAL_TARGET
-						#	Prima di dire che e' andato bene devo vedere se e' stato superato l'eventuale controllo dei checksum
-						if [ $CHECKSUM_PASSED == "Y" ]; then
-							#	Rename della directory (da temp a reale)
-							#	mv $TEMP_TARGET $REAL_TARGET
+						#	CHECKSUM result evaluation
+						#	if true, than forwad task to completed
+						#	otherwise send to fallout
+						if $CHECKSUM_PASSED; then
 							main_logger 0 "$WORKING_UUID archiving complete"
 							update_uuid_status $WORKING_UUID 60
-							#	edit del MESSAGE sul report
-							sed 's/___MESSAGE___/success/' -i $JsonOutput
-							sed 's/___MESSAGE___/success/' -i $XmlOutput
-						else	#	Mando in fallout (EXITCODE e' gia' stato settato
+							create_success_report $WORKING_UUID "W"
+						else
 							main_logger 0 "Some file did not pass checksum verification"
 							main_logger 0 "$WORKING_UUID is now in fallout"
 							fallout_uuid $WORKING_UUID 111
-							#	edit del MESSAGE sul report
-							fallout_message=`$CMD_DB"select errordescription from requests where uuid='"$WORKING_UUID"';"`
-							sed 's/___MESSAGE___/'"$fallout_message"'/' -i $JsonOutput
-							sed '/exitcode/s/200/500/' -i $JsonOutput
-							sed 's/___MESSAGE___/'"$fallout_message"'/' -i $XmlOutput
-							sed '/exitcode/s/200/500/' -i $XmlOutput
-							echo -e "500\tfailure\t"$FLOCAT"\t""$fallout_message" > $TxtOutput
+							create_fallout_report $WORKING_UUID "W"
 						fi
-						if [ $CHECKSUMSAVE == "Y" ]; then
-							cp $XmlOutput $REAL_TARGET
-							cp $JsonOutput $REAL_TARGET
-						fi
+						#	Copy flocat list on tape
+						cp $XmlOutput $REAL_TARGET
 					else
-						#############################################
-						#	MALE---- faccio fallout
-						fallout_message=`$CMD_DB"select errordescription from requests where uuid='"$WORKING_UUID"';"`
-						#		TXT
-						echo -e "500\tfailure\t"$FLOCAT"\t""$fallout_message" > $TxtOutput
-						#		XML
-						echo '<LTFSArchiver jobid="'$WORKING_UUID'" service="WriteToLTO" command="'$fileodir'" exitcode="500">' > $XmlOutput
-						echo '<message>'"$fallout_message"'</message></LTFSArchiver>'
-						#		JSON
-						echo -e '{"jobid":"'$WORKING_UUID'",' > $JsonOutput
-						echo -e '"service":"WriteToLTO",'"\n"'"command":"'$fileodir'",'"\n"'"exitcode":"500",' >>$JsonOutput
-						echo -e '"message":"'"$fallout_message"'"}' >> $JsonOutput
-						#	log
 						main_logger 0 "$WORKING_UUID is now in fallout"
 						fallout_uuid $WORKING_UUID 107
-						#	NON CONTINUO con gli altri eventuali uuid
-						CONTINUE="N"
+						create_fallout_report $WORKING_UUID "W"
+						#	Set continue to false... there could be some problem on tape
+						#	remaining tasks will be requeued
+						CONTINUE=false
 					fi
 				else 
+					#	fallout due to missing (vanished after submission?) source
 					fallout_uuid $WORKING_UUID 106
+					create_fallout_report $WORKING_UUID "W"
 				fi
 			fi
 		fi
-		#	Sottraggo da booked lo spazio preallocato
-		#	ed aggiorno lo spazio libero
+		#	recheck of free space on tape and de-booking of the space booked for this uuid
 		NOW_FREE=`df -m $TARGETFS | grep $TARGETFS | awk '{print $4}'`
 		let NOW_FREE+=-$FREE_WATERMARK
+		#	Dirty trick... :-(
 		[ $NOW_FREE -lt 0 ] && NOW_FREE=0
+		#	Update free an booked
 		$CMD_DB" update lto_info set free=$NOW_FREE,booked=booked-${UUID_DATA[1]} where label='${COMMON_PARMS[0]}'" >/dev/null 2>&1
 		bkpltoinfo
 	else
-		#	Mi e' stato detto di NON continuare per problemi su uuid precedente
+		#	CONTINUE=false; reque of remeining tasks
 		main_logger 0 "uuid $WORKING_UUID requeued due to a previous error"
-		#	riaccodo la lavorazione (come un resubmit)
 		requeue_uuid
 	fi
 done
-#	Se sono arrivato qui con CONTINUE="N" significa che devo marcare il tape come inutilizzabile per gli archive (ovvero FREE=0)
-if [ $CONTINUE == "N" ]; then
+#	If CONTINUE was set to false, set free space to zero, so the tape will not be used by other archive tasks
+if ! $CONTINUE ; then
 	$CMD_DB" update lto_info set free=0 where label='${COMMON_PARMS[0]}'" >/dev/null 2>&1
 	bkpltoinfo
 fi
-#	smonto il FS
+#	umount of file sistem
+#	tape will be unloaded/ejected by tape_archive that called me
 for ((attempt=1; attempt<5 ; attempt++)); do
 	umount $TARGETFS
 	URC=$?
@@ -200,6 +177,6 @@ for ((attempt=1; attempt<5 ; attempt++)); do
 		sleep `echo "$attempt * 5" | bc`
 	fi
 done
-#	Aspetto LTFSARCHIVER_LTFSTIMEOUT secondi
+#	waiting for LTFS index flushing
 main_logger 1 "Waiting while LTFS updates index... $LTFSARCHIVER_LTFSTIMEOUT sec."
 sleep $LTFSARCHIVER_LTFSTIMEOUT

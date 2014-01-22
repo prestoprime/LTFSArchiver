@@ -1,0 +1,129 @@
+#!/bin/bash
+
+#  PrestoPRIME  LTFSArchiver
+#  Version: 1.3
+#  Authors: L. Savio, L. Boch, R. Borgotallo
+#
+#  Copyritght (C) 2011-2012 RAI – Radiotelevisione Italiana <cr_segreteria@rai.it>
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU Affero General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU Affero General Public License for more details.
+#
+# You should have received a copy of the GNU Affero General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
+
+#------------------------------------
+
+function cercainpool
+{
+if [ -z $poolname ]; then
+	gianelpool=1
+	poolname=`$CMD_DB" select poolname from lto_info where label='$ltolabel'" | sed -e 's/^ *//'`
+else
+	gianelpool=`$CMD_DB" select count (*) from lto_info where label='$ltolabel' AND poolname='$poolname';" | sed -e 's/^ *//'`
+fi
+}
+#------------------------------------
+
+#------------------------------------
+function Withdraw
+{
+#	Passo 1 - Esiste gia' in lto_info?
+cercatape $ltolabel
+if [ $trovato == 0 ]; then
+	exitcode="400"; message='TapeID '$ltolabel' not found'
+else
+	#	Se esiste...  Passo 2 - e' assegnato al quel pool?
+	cercainpool	
+	if [ $gianelpool = 0 ]; then
+		#	messaggio
+		exitcode="400"; message='TapeID '$ltolabel' does not belong to '$poolname' pool'
+	else	# NON elimino se e' in uso
+		inuse=`$CMD_DB" select inuse from lto_info where label='$ltolabel';" | sed -e 's/^ *//'`
+		queued=`$CMD_DB" select count(*) from requests where ltotape='$ltolabel' and status <> 'completed';" | sed -e 's/^ *//'`
+		if ( [ -z $inuse ] && [ $queued == 0 ] ); then
+			#       Genero taskid e salvo su db
+			taskid=`uuidgen`
+			XmlOutput=$LTFSARCHIVER_HOME/reportfiles/$taskid.xml
+			$CMD_DB" insert into requests (callingtime,uuid,ltotape,operation,manager,status,substatus,sourcefile,poolname) \
+			VALUES('$callingtime','$taskid','$ltolabel','D','B','waiting',0,'none','$poolname');" >/dev/null 2>&1
+			RC=$?
+			if [ $RC != 0 ]; then
+				exitcode="500"; message="Error occurred while inserting task"
+			else
+				starttime=`date '+%Y-%m-%d %H:%M:%S'`
+				$CMD_DB" update requests set starttime='$starttime' where uuid='$taskid';" >/dev/null 2>&1
+				#	Elimino record in lto_info
+				$CMD_DB" delete from lto_info where label='$ltolabel'" >/dev/null 2>&1
+				RC=$?
+				utime=`date '+%Y-%m-%d %H:%M:%S'`
+				if [ $RC == 0 ]; then
+					#	Segno "success"
+					$CMD_DB" update requests set status='completed',substatus=60,endtime='$utime' where uuid='$taskid'" >/dev/null 2>&1
+					bkpltoinfo
+					exitcode="200"
+
+					#XMLOUTPUT="\t"'<Output>'"\n"
+					#XMLOUTPUT=$XMLOUTPUT"\t\t"'<Task id="'$taskid'" status="completed"/>'"\n"
+					#XMLOUTPUT=$XMLOUTPUT"\t"'</Output>'
+				else
+					exitcode="500"; message="Error occurred while deleting tape"
+					$CMD_DB" delete from requests where uuid='"$taskid"';"  >/dev/null 2>&1
+				fi
+			fi	
+		else
+			exitcode="400";	message="LTO with label :$ltolabel is assigned to a task and cannot be deleted from pool: $poolname"
+		fi
+	fi
+fi
+}
+################################################################################
+# Script starts here
+. $CFGFILE
+. `dirname $0`/common.sh
+command=`basename $0`
+PARM=$QUERY_STRING
+RECEIVEDTIME=`date +'%Y-%m-%dT%H:%M:%S'`
+VALIDPARMS="TapeID|PoolName|FromGUI|Output"
+output=$( get_parameter Output )
+normalize_output
+get_supplied_parameters
+guicall=$( get_parameter FromGUI )
+ltolabel=$( get_parameter TapeID )
+poolname=$( get_parameter PoolName )
+callingtime=`date '+%Y-%m-%d %H:%M:%S'`
+if [ -z $output ]; then
+        output=`echo $LTFSARCHIVER_OUTPUT | tr '[A-Z]' ' [a-z]'`
+        PARM=$PARM'&Output='$output
+fi
+[ -z $guicall ] && guicall="false"
+[ -z $output ] && output="XML"
+#==================================================================================
+#       RESTRIZIONI SUI PARAMETRI
+#       Ci sono parametri sconosciuti - stampo ed esco
+if ! [ -z "$BADPARMS" ]; then
+	exitcode="400"
+	message="${BADPARMS}"
+else
+	if [ -z $ltolabel ]; then
+		exitcode="400"; message='TapeID not supplied'
+	else
+		if [ -z $poolname ]; then
+			exitcode="400"; message='PoolName not supplied'
+		else
+			Withdraw
+		fi
+	fi
+fi
+[ -z "${XMLOUTPUT}" ] || echo -e $XMLOUTPUT > $XmlOutput
+crea_xml_answer
+send_output
+exit

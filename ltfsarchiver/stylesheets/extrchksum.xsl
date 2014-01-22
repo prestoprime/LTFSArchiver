@@ -1,10 +1,10 @@
-#!/bin/bash
-
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 
 #  PrestoPRIME  LTFSArchiver
 #  Version: 1.3
 #  Authors: L. Savio, L. Boch, R. Borgotallo
 #
-#  Copyritght (C) 2011-2012 RAI – Radiotelevisione Italiana <cr_segreteria@rai.it>
+#  Copyritght (C) 2011-2012 RAI âadiotelevisione Italiana <cr_segreteria@rai.it>
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU Affero General Public License as published by
@@ -18,24 +18,14 @@
 #
 # You should have received a copy of the GNU Affero General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
-
-PARMN=$#
-PARMV=( $@ )
-while [ `pidof mtx | wc -l` -gt 0 ]; do
-	echo "mtx running..."
-	sleep 1
-done
-case ${PARMV[1]} in 
-	"/dev/sgx")
-		if [ ${PARMV[2]}  == "status" ]; then
-			mtx -f /dev/changer status | sed -e 's/VolumeTag=NS/VolumeTag=XX/g' -e 's/VolumeTag = NS/VolumeTag = XX/g'
-		else
-			PARMV[1]="/dev/changer"
-			mtx ${PARMV[@]}
-		fi
-	;;
-	*)
-		
-		mtx $@
-	;;
-esac
+###############################
+-->
+<xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform" xmlns:xlink="http://www.w3.org/1999/xlink" version="1.0">
+	<xsl:output method="text" omit-xml-declaration="yes" indent="no"/>
+	<xsl:template match="//FLocat">
+		<xsl:variable name="chkfound" select="./checksum"/>
+		<xsl:if test="$chkfound">
+        		<xsl:value-of select="concat(checksum/@type,';',checksum/@value,' *', @xlink:href)"/>
+		</xsl:if>
+	</xsl:template>
+</xsl:stylesheet>
