@@ -61,11 +61,19 @@ echo "Operating system: $OS"
 
 
 # This scripts uses sg_map utility
+#	CONF file location dependig from start type
+#		if started by command line path are relative to script itself
+#		if started by setup.sh script the base path is passed
+if [ "$1" == "fromsetup" ]; then
+	RUNNING_CFG=$2/conf/ltfsarchiver.conf
+	GUESSED_CFG=$2/`grep "GUESSED_CONF=" $RUNNING_CFG | sed -e 's/.*=//' -e 's/\$LTFSARCHIVER_HOME\///'`
+else
+	RUNNING_CFG=`dirname $0`/../../conf/ltfsarchiver.conf
+	GUESSED_CFG=`dirname $0`/../../`grep "GUESSED_CONF=" $RUNNING_CFG | sed -e 's/.*=//' -e 's/\$LTFSARCHIVER_HOME\///'`
+fi
 PRINTOUT=/tmp/guess_conf.out
 RUNNING_TMP=/tmp/ltfsarchiver.tmp
-RUNNING_CFG=`dirname $0`/../../conf/ltfsarchiver.conf
 GUESSED_TMP=/tmp/guessed.tmp
-GUESSED_CFG=`dirname $0`/../../`grep "GUESSED_CONF=" $RUNNING_CFG | sed -e 's/.*=//' -e 's/\$LTFSARCHIVER_HOME\///'`
 #	Come running prendo guessed.conf se esiste, viceversa prendo ltfsarchiver
 [ -f $GUESSED_CFG ] && RUNNING_CFG=$GUESSED_CFG
 #

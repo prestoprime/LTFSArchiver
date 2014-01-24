@@ -3,7 +3,7 @@
 #  Version: 1.3
 #  Authors: L. Savio, L. Boch, R. Borgotallo
 #
-#  Copyritght (C) 2011-2012 RAI âadiotelevisione Italiana <cr_segreteria@rai.it>
+#  Copyritght (C) 2011-2012 RAI Radiotelevisione Italiana <cr_segreteria@rai.it>
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU Affero General Public License as published by

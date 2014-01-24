@@ -1,0 +1,1 @@
+--insecure --connect-timeout 10 -m 60 --retry 2

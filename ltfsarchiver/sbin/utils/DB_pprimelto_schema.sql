@@ -16,7 +16,7 @@ SET default_tablespace = '';
 SET default_with_oids = false;
 
 --
--- Name: db_info; Type: TABLE; Schema: public; Owner: pprime; Tablespace: 
+-- Name: db_info; Type: TABLE; Schema: public; Owner: ltfsarchiver_user; Tablespace: 
 --
 
 CREATE TABLE db_info (
@@ -24,10 +24,10 @@ CREATE TABLE db_info (
 );
 
 
-ALTER TABLE public.db_info OWNER TO pprime;
+-- ALTER TABLE public.db_info OWNER TO ltfsarchiver_user;
 
 --
--- Name: lock_table; Type: TABLE; Schema: public; Owner: pprime; Tablespace: 
+-- Name: lock_table; Type: TABLE; Schema: public; Owner: ltfsarchiver_user; Tablespace: 
 --
 
 CREATE TABLE lock_table (
@@ -36,10 +36,10 @@ CREATE TABLE lock_table (
 );
 
 
-ALTER TABLE public.lock_table OWNER TO pprime;
+-- ALTER TABLE public.lock_table OWNER TO ltfsarchiver_user;
 
 --
--- Name: lto_info; Type: TABLE; Schema: public; Owner: pprime; Tablespace: 
+-- Name: lto_info; Type: TABLE; Schema: public; Owner: ltfsarchiver_user; Tablespace: 
 --
 
 CREATE TABLE lto_info (
@@ -54,10 +54,10 @@ CREATE TABLE lto_info (
 );
 
 
-ALTER TABLE public.lto_info OWNER TO pprime;
+-- ALTER TABLE public.lto_info OWNER TO ltfsarchiver_user;
 
 --
--- Name: requests; Type: TABLE; Schema: public; Owner: pprime; Tablespace: 
+-- Name: requests; Type: TABLE; Schema: public; Owner: ltfsarchiver_user; Tablespace: 
 --
 
 CREATE TABLE requests (
@@ -87,10 +87,10 @@ CREATE TABLE requests (
 );
 
 
-ALTER TABLE public.requests OWNER TO pprime;
+-- ALTER TABLE public.requests OWNER TO ltfsarchiver_user;
 
 --
--- Name: requests_id_seq; Type: SEQUENCE; Schema: public; Owner: pprime
+-- Name: requests_id_seq; Type: SEQUENCE; Schema: public; Owner: ltfsarchiver_user
 --
 
 CREATE SEQUENCE requests_id_seq
@@ -101,31 +101,31 @@ CREATE SEQUENCE requests_id_seq
     CACHE 1;
 
 
-ALTER TABLE public.requests_id_seq OWNER TO pprime;
+-- ALTER TABLE public.requests_id_seq OWNER TO ltfsarchiver_user;
 
 --
--- Name: requests_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: pprime
+-- Name: requests_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: ltfsarchiver_user
 --
 
 ALTER SEQUENCE requests_id_seq OWNED BY requests.id;
 
 
 --
--- Name: requests_id_seq; Type: SEQUENCE SET; Schema: public; Owner: pprime
+-- Name: requests_id_seq; Type: SEQUENCE SET; Schema: public; Owner: ltfsarchiver_user
 --
 
 SELECT pg_catalog.setval('requests_id_seq', 798, true);
 
 
 --
--- Name: id; Type: DEFAULT; Schema: public; Owner: pprime
+-- Name: id; Type: DEFAULT; Schema: public; Owner: ltfsarchiver_user
 --
 
 ALTER TABLE ONLY requests ALTER COLUMN id SET DEFAULT nextval('requests_id_seq'::regclass);
 
 
 --
--- Data for Name: db_info; Type: TABLE DATA; Schema: public; Owner: pprime
+-- Data for Name: db_info; Type: TABLE DATA; Schema: public; Owner: ltfsarchiver_user
 --
 
 COPY db_info (dbversion) FROM stdin;
@@ -134,7 +134,7 @@ COPY db_info (dbversion) FROM stdin;
 
 
 --
--- Name: db_info_pkey; Type: CONSTRAINT; Schema: public; Owner: pprime; Tablespace: 
+-- Name: db_info_pkey; Type: CONSTRAINT; Schema: public; Owner: ltfsarchiver_user; Tablespace: 
 --
 
 ALTER TABLE ONLY db_info
@@ -142,7 +142,7 @@ ALTER TABLE ONLY db_info
 
 
 --
--- Name: lock_table_pkey; Type: CONSTRAINT; Schema: public; Owner: pprime; Tablespace: 
+-- Name: lock_table_pkey; Type: CONSTRAINT; Schema: public; Owner: ltfsarchiver_user; Tablespace: 
 --
 
 ALTER TABLE ONLY lock_table
@@ -150,7 +150,7 @@ ALTER TABLE ONLY lock_table
 
 
 --
--- Name: lto_info_pkey; Type: CONSTRAINT; Schema: public; Owner: pprime; Tablespace: 
+-- Name: lto_info_pkey; Type: CONSTRAINT; Schema: public; Owner: ltfsarchiver_user; Tablespace: 
 --
 
 ALTER TABLE ONLY lto_info
@@ -158,7 +158,7 @@ ALTER TABLE ONLY lto_info
 
 
 --
--- Name: requests_pkey; Type: CONSTRAINT; Schema: public; Owner: pprime; Tablespace: 
+-- Name: requests_pkey; Type: CONSTRAINT; Schema: public; Owner: ltfsarchiver_user; Tablespace: 
 --
 
 ALTER TABLE ONLY requests

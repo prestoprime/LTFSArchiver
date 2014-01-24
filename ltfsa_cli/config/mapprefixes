@@ -1,0 +1,12 @@
+#
+#format of this file
+#
+# each line has three fields separated by ':'
+#
+#	first field identifies the end which can be 's' for local prefix or 'd' for remote prefix
+#	second field is the mapId
+#	thirt field is the prefix
+# a map is defined by two lines with same mapId and two different ends
+#
+s:1:/mnt/local	
+d:1:/mnt/remote

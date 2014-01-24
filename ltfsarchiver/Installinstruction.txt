@@ -1,0 +1,177 @@
+# PrestoPRIME  LTFSArchiver
+#  Version: 1.1
+#  Authors: L. Savio, L. Boch, R. Borgotallo
+#
+#  Copyritght (C) 2011-2012 RAI – Radiotelevisione Italiana <cr_segreteria@rai.it>
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU Affero General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU Affero General Public License for more details.
+#
+# You should have received a copy of the GNU Affero General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+
+LTFSArcchive can be installed in two different ways:
+
+a) 	Starting the script "setup.sh" that you can find in the directory with README.TXT
+b) 	Proceeding with a step-by-step manual configuration as further described
+
+In both cases, you need to understand some of the concepts about the parameters
+that setup process will set.
+
+LTFSARCHIVER_HOME
+It's the directory where scripts, API's and other files will be placed
+The deafult assumed by setup script is /opt/ltfsarchiver
+
+LTFSARCHIVER_USER and LTFSARCHIVER_GROUP
+They're the username and usegroup that LTFSArchiver uses to access DB and to mount LTFS tapes
+So LTFSARCHIVER_USER must be created as a system user AND as a postgresql user
+
+LTFSARCHIVER_MODE
+It represents the running mode of the server and it influences the dispatchinc process of tasks.
+Three modes are available (config mode in brackets)
+
+a)	(B)oth: LTFSArchiver will assume that at least a tape library is connected.
+	When a specific tape is needed, it will be searched in the library at first; if it is not
+	found, the task will be assigned to an external tape and it will require a manual tape load
+
+b)	(M)anual: LTFSArchiver will assume that all of the configured tape dvices are manually managed
+	When a specific tape is needed, it will NOT be searched, the task will be assigned to an
+	external tape and it will require a manual tape load
+
+c)	(C)hanger-only: LTFSArchiver will assume that all configured tape devices are managed by a tape
+	library.
+	When a specific tape is needed, it will be searched in the library; if it is not found,
+	the task will fail.
+
+=============================================================================
+
+		Using the setup.sh script
+
+Start the script:
+	./setup.sh
+
+A set of checks will be performed that needed sercices/utilities/python modules are installed
+
+Then you will be prompted to supply the following parameters:
+
+1)	Base installation directory
+	you will have to enter the directory where you want to create "ltfsarchiver" one
+	e.g. if you want to install into /usr/local/ltfsarchiver, enter "/usr/local"
+	The default value is "/opt"; if you want to accept the default, simply press ENTER
+
+2)	LTFSArchiver user
+	You will have to enter the name of the name of the system user that LTFSArchiver will use
+	If the user does not exist yet, you will be prompted to enter the password too
+	The default values are "pprime" and "pprime09"; if you want to accept the default, simply press ENTER
+
+3)	LTFSArchiver running mode
+	You will have to enter the running mode (as described before) of LTFSArchiver
+	The default is "B"; if you want to accept the default, simply press ENTER
+	
+A resume of the entered values will be shown, allowing you to:
+- Change value(s)
+- Execute installation
+- Exit from installation
+
+If you confirm the entered values, setup will proceed and you will be finally prompted to chooes if
+execute (or not) a specific script that will try to guess the tape device configuration
+This can be however run later (or ehnever you want) launching the scriptA "guess_conf.sh"
+located in the sbin/utils subdirectory.
+
+When the install script say "All done" you will be able to start LTFSArchiver server:
+- issue a reload command to httpd daemon to load the newly added service
+	service apache2 reload (Ubuntu)
+	service httpd reload (CentOS)
+- issue a start command to ltfsarchiver server
+	service ltfsarchiver start
+
+Finally check that server is working as desired.
+a) use a browser to access URL "http://IP_ADDRESS/ltfsarchiver"
+	A welcome page should appear
+b) use a browser to access URL "http://IP_ADDRESS/ltfsarchiver/cgi-bin/QueryTask".
+	An XML file shoul be delivered, saying that no task has been found
+
+
+=============================================================================
+
+		Fully manual installation
+
+1) Be root:
+   su -
+
+1) Choose the destination base directory wher to install LTFSArchiver
+   (a ltfsarchiver subdirectory will be created into it)
+   Usually /opt is used, and /opt/ltfsarchiver directory will contain all files, so
+   /opt/ltfsarchiver (or whatever you choose) will then identified as LTFSARCHIVER_HOME
+
+2) Unpack the tar archive:
+   i.e.: tar -xvzf PrestoPRIME_LTFSArchiver_<ver>.tar.gz -C /opt
+   This will put all the files in the correct place on the FS
+
+3) If not already created, create the LTFSArchiver system user
+   (LTFSARCHIVER_USER will be used in samples) and protect access with a password
+   useradd LTFSARCHIVER_USER
+   passwd
+
+4) Create a Postgres User with name LTFSARCHIVER_USER
+   su - postgres
+   createuser LTFSARCHIVER_USE  
+   (answer yes when asked to be able to create db, no otherwise)
+   exit (back to be root)
+
+5) Create the LTFSArchive database with this sequence of commands:
+   su - LTFSARCHIVER_USER
+   createdb ltfsarchiver
+   psql -U LTFSARCHIVER_USER ltfsarchiver -f /LTFSARCHIVER_HOME/sbin/utils/DB_pprimelto_schema.sql
+   exit (back to be root)
+
+6) Modify the main configuration file: /LTFSARCHIVER_HOME/conf/ltfsarchiver.conf
+   you must AT LEAST edit placeholders for the following parameters:
+	LTFSARCHIVER_MODE
+	LTFSARCHIVER_HOME
+	LTFSARCHIVER_USER
+	LTFSARCHIVER_GROUP (if unknown, get if with command: id -nu LTFSARCHIVER_USER
+
+   If needed, change other values (refer to LTFSArchiverConfiguration doc)
+
+8) Check the device configuration (libraries and lto units) using the
+   "guessconfig script": /INSTALL_DIR/sbin/utils/guess_conf.sh
+   the script will check and (if needed and approved) override the base
+   configuration
+
+9) Create a startup script in /etc/init.d directory
+   Both CentOS/Ubuntu sample files are available in /INSTALL_DIR/specific:
+   - ltfsarchiver.centos
+   - ltfsarchiver.ubuntu
+   change _LTFSARCHIVER_HOME_ with the real home directory
+   Finally add the ltfsarchive service to the startup manager, using the command:
+   update-rc.d ltfsarchiver start 90 3 5 . stop 90 0 1 2 4 6 . (Ubuntu)
+   chkconfig --add ltfsarchiver (CentOS)
+
+10) Create a .conf file to make httpd able to know where LTFSArchiver is.
+    A sample file (/INSTALL_DIR/specific/ltfsarchiver.conf) is available
+    change _LTFSARCHIVER_HOME_ with the real home directory
+    restart httpd service:
+    /etc/init.d/apache2 restart (Ubuntu)
+    /etc/init.d/httpd restart (CentOS)
+
+11) Create a script in /etc/cron.daily to enable log/db/report cleaning
+    A sample file (/INSTALL_DIR/specific/ltfsarchiver.cron.daily) is available
+    change _LTFSARCHIVER_HOME_ with the real home directory
+
+12) Launch the LTFSArchive service:
+    /etc/init.d/ltfsarchiver start
+
+13) Finally check that server is working as desired.
+a) use a browser to access URL "http://IP_ADDRESS/ltfsarchiver"
+	A welcome page should appear
+b) use a browser to access URL "http://IP_ADDRESS/ltfsarchiver/cgi-bin/QueryTask".
+	An XML file shoul be delivered, saying that no task has been found

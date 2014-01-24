@@ -1,0 +1,207 @@
+#!/bin/tcsh -f
+#
+#  ltfsa_cli
+#  Version: 0.0.1
+#  Authors: L. Boch
+#
+#  Copyright (C) 2013-2014 RAI - Radiotelevisione Italiana <cr_segreteria@rai.it>
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU  General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+# Configuration is made of:
+#	makefile
+#	config/ 
+#		checksum
+#		curloptions
+#		ltfsaserverurl
+#		output
+#		poolname
+#		mapprefixes (not supported in this version)
+#
+# ./configure can be used for preparing the installion or for modifying an existing configuration
+#
+# DEPENDENCIES: tcsh, curl, 
+#	cannot solve tcsh as it's required for running the script (apt-get install tcsh)
+# RECOMMENDED: xsltproc, tofrodos (fromdos), gridsite-clients (urlencode), libxml2-utils)
+# recommended are not checked
+#
+# STEPS: checking dependencies, checking pre-existing configuration, parsing user inputs, creating or updating configuration
+#
+set echo_style = both
+set this = `basename $0`
+cd `dirname $0`
+set ltfsa_cli_dir = `pwd`
+set ltfsa_cli_bin_install = /usr/local/bin
+#
+#	Checking dependencies
+#
+set statusOK = "Status: install ok installed"
+#set status = `dpkg -s xsltproc|grep Status:`
+#if ( "$status" != "$statusOK" ) then
+#	echo "xsltproc not found. Try apt-get install xsltproc"
+#	exit 1
+#endif
+set status = `dpkg -s curl|grep Status:`
+if ( "$status" != "$statusOK" ) then
+	echo "curl not found. Try apt-get install curl"
+	exit 1
+endif
+#set status = `dpkg -s tofrodos|grep Status:`
+#if ( "$status" != "$statusOK" ) then
+#	echo "tofrodos not found. Try apt-get install tofrodos"
+#	exit 1
+#endif
+#set status = `dpkg -s gridsite-clients|grep Status:`
+#if ( "$status" != "$statusOK" ) then
+#	echo "gridsite-clients not found. Try apt-get install gridsite-clients"
+#	exit 1
+#endif
+#set status = `dpkg -s libxml2-utils|grep Status:`
+#if ( "$status" != "$statusOK" ) then
+#	echo "libxml2-utils not found. Try apt-get install libxml2-utils"
+#	exit 1
+#endif
+echo "Dependencies okayed. Running check of existing configuration"
+if ( -ersf config/checksum ) then
+	set checksum = `cat config/checksum`
+else
+	set checksum = N
+endif
+if ( -ersf config/inumber ) then
+	set ltfsaserverurl = `cat config/ltfsaserverurl`
+else
+	set ltfsaserverurl = "http://localhost/ltfsarchiver/cgi-bin"
+endif
+if ( -ersf config/output ) then
+	set output = `cat config/output`
+else
+	set output = XML
+endif
+if ( -ersf config/poolname ) then
+	set poolname = `cat config/poolname`
+else
+	set poolname = PoolA
+endif
+if ( -ersf config/curloptions ) then
+	set curloptions = `cat config/curloptions`
+else
+	set curloptions = "--insecure --connect-timeout 10 -m 60 --retry 2"
+endif
+set ltfsa_cli_user = `whoami`
+
+# generic parsing of input
+set i = 1
+while ( $i <= $#argv )
+#		checksum
+#		curloptions
+#		ltfsaserverurl
+#		output
+#		poolname
+        if ( "$argv[$i]" == "-h" || "$argv[$i]" == "--help" ) then
+#		write help
+		echo "$this usage:"
+		echo "\t\t--checksum ($checksum)"
+		echo "\t\t--curloptions ($curloptions)"
+		echo "\t\t--ltfsaserverurl ($ltfsaserverurl)"
+		echo "\t\t--output ($output)"
+		echo "\t\t--poolname ($poolname)"
+		echo "\t\t--ltfsa_cli_user ($ltfsa_cli_user)"
+		echo "\t\t--ltfsa_cli_bin_install ($ltfsa_cli_bin_install)"
+		echo 
+		exit 0
+        else if ( "$argv[$i]" == "--ltfsa_cli_bin_install" ) then
+                @ i++
+                set ltfsa_cli_bin_install = "$argv[$i]"
+        else if ( "$argv[$i]" == "--ltfsa_cli_user" ) then
+                @ i++
+                set ltfsa_cli_user = "$argv[$i]"
+        else if ( "$argv[$i]" == "--output" ) then
+                @ i++
+		if ( "$argv[$i]" == "XML" ) then
+			set output = $argv[$i]
+		else if ( "$argv[$i]" == "JSON" ) then
+			set JSON = $argv[$i]
+		else
+			echo "Bad value: $argv[$i]"
+		endif
+        else if ( "$argv[$i]" == "--checksum" ) then
+                @ i++
+		if ( "$argv[$i]" == "N" ) then
+			set checksum = $argv[$i]
+		else if ( "$argv[$i]" == "MD5" ) then
+			set checksum = $argv[$i]
+		else if ( "$argv[$i]" == "SHA1" ) then
+			set checksum = $argv[$i]
+		else if ( "$argv[$i]" == "MD5_both" ) then
+			set checksum = $argv[$i]
+		else if ( "$argv[$i]" == "SHA1_both" ) then
+			set checksum = $argv[$i]
+		else
+			echo "Bad value: $argv[$i]"
+		endif
+        else if ( "$argv[$i]" == "--curloptions" ) then
+                @ i++
+                set curloptions = "$argv[$i]"
+        else if ( "$argv[$i]" == "--poolname" ) then
+                @ i++
+                set poolname = "$argv[$i]"
+        else if ( "$argv[$i]" == "--ltfsaserverurl" ) then
+                @ i++
+                set ltfsaserverurl = "$argv[$i]"
+        else
+		echo "$this syntax error"
+		echo "$0 -h for help on usage"
+		exit 1
+        endif
+	@ i++
+end
+# Sanity check
+set isuser = `grep -c $ltfsa_cli_user /etc/passwd`
+if ( !($isuser) ) then
+	echo "\n${this}: ltfsa_clir_user $ltfsa_cli_user not found"
+	exit 2
+endif
+if ( !(-erx $ltfsa_cli_bin_install) ) then
+	echo "\n${this}: ltfsa_clir_bin_install $ltfsa_cli_bin_install not found"
+	exit 2
+endif
+#Writing config
+echo $checksum > config/checksum
+echo $curloptions > config/curloptions
+echo $ltfsaserverurl > config/ltfsaserverurl
+echo $output > config/output
+echo $poolname > config/poolname
+#
+#Creating ltfsa_cli shell
+cat license.h > bin/ltfsa_cli
+echo "export pdir=$ltfsa_cli_dir" >> bin/ltfsa_cli
+echo "export PATH=${PATH}:$pdir/bin" >> bin/ltfsa_cli
+echo "bash" >> bin/ltfsa_cli
+chmod ugo+x bin/ltfsa_cli
+#
+#Creating makefile for install/uninstall
+#
+if ( -ersf makefile ) then
+	cp makefile makefile.bak
+endif
+cat license.h > makefile
+echo "ALL:	install uninstall\n"
+echo "install:\n\tinstall bin/ltfsa_cli $ltfa_cli_bin_install/\n\n" >> makefile
+echo "uninstall:\n\trm -f$ltfa_cli_bin_install/ltfsa_cli\n\n" >> makefile
+#
+#End of the story
+#
+echo "${this}: ltfsa_cli configured. You can run 'make install' for starting using it (must be superuser)\nFor uninstalling just run 'make uninstall' and remove $ltfsa_cli_dir for complete removal.\nYou can change the configuration any time you need.\n\nHow to start using ltfsa_cli: just type 'ltfsa_cli<enter>' from a terminal and you'll get the environment ready for using the ltfsa_cli* commands\n\nHave fun!\n" 
+echo "${this}: end of the story"
+exit 0
