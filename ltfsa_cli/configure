@@ -186,8 +186,8 @@ echo $poolname > config/poolname
 #Creating ltfsa_cli shell
 cat license.h > bin/ltfsa_cli
 echo "export pdir=$ltfsa_cli_dir" >> bin/ltfsa_cli
-echo "export PATH=${PATH}:$pdir/bin" >> bin/ltfsa_cli
-echo "bash" >> bin/ltfsa_cli
+echo 'export PATH=${PATH}:$pdir/bin' >> bin/ltfsa_cli
+echo 'bash -l' >> bin/ltfsa_cli
 chmod ugo+x bin/ltfsa_cli
 #
 #Creating makefile for install/uninstall
