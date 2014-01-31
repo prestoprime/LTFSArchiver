@@ -27,6 +27,7 @@
 #		ltfsaserverurl
 #		output
 #		poolname
+#		format
 #		mapprefixes (not supported in this version)
 #
 # ./configure can be used for preparing the installion or for modifying an existing configuration
@@ -98,6 +99,12 @@ if ( -ersf config/curloptions ) then
 else
 	set curloptions = "--insecure --connect-timeout 10 -m 60 --retry 2"
 endif
+if ( -ersf config/format ) then
+#	can be F|Y|N  this is about formatting tapes at registration
+	set format = `cat config/format`
+else
+	set format = "N"
+endif
 set ltfsa_cli_user = `whoami`
 
 # generic parsing of input
@@ -111,11 +118,12 @@ while ( $i <= $#argv )
         if ( "$argv[$i]" == "-h" || "$argv[$i]" == "--help" ) then
 #		write help
 		echo "$this usage:"
-		echo "\t\t--checksum ($checksum)"
+		echo "\t\t--checksum N|MD5|MD5_both|SHA1|SHA1_both ($checksum)"
 		echo "\t\t--curloptions ($curloptions)"
 		echo "\t\t--ltfsaserverurl ($ltfsaserverurl)"
-		echo "\t\t--output ($output)"
+		echo "\t\t--output XML|JSON($output)"
 		echo "\t\t--poolname ($poolname)"
+		echo "\t\t--format F|Y|N ($format)"
 		echo "\t\t--ltfsa_cli_user ($ltfsa_cli_user)"
 		echo "\t\t--ltfsa_cli_bin_install ($ltfsa_cli_bin_install)"
 		echo 
@@ -131,7 +139,18 @@ while ( $i <= $#argv )
 		if ( "$argv[$i]" == "XML" ) then
 			set output = $argv[$i]
 		else if ( "$argv[$i]" == "JSON" ) then
-			set JSON = $argv[$i]
+			set output = $argv[$i]
+		else
+			echo "Bad value: $argv[$i]"
+		endif
+        else if ( "$argv[$i]" == "--format" ) then
+                @ i++
+		if ( "$argv[$i]" == "Y" ) then
+			set format = $argv[$i]
+		else if ( "$argv[$i]" == "F" ) then
+			set format = $argv[$i]
+		else if ( "$argv[$i]" == "N" ) then
+			set format = $argv[$i]
 		else
 			echo "Bad value: $argv[$i]"
 		endif

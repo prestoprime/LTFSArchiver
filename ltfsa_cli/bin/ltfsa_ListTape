@@ -29,7 +29,6 @@ if ( !($?pdir) ) then
 	exit 99
 endif
 set tapeid = null
-set format = `cat $pdir/config/format`
 set outfile = null
 set output = `cat $pdir/config/output`
 set curloptions = `cat $pdir/config/curloptions`
