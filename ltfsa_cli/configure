@@ -215,7 +215,7 @@ if ( -ersf makefile ) then
 	cp makefile makefile.bak
 endif
 cat license.h > makefile
-echo "install:\n\tinstall bin/ltfsa_cli $ltfsa_cli_bin_install/\n\n" >> makefile
+echo "install:\n\tmkdir logs\n\tchmod ugo+w logs\n\tinstall bin/ltfsa_cli $ltfsa_cli_bin_install/\n\n" >> makefile
 echo "uninstall:\n\trm -f $ltfsa_cli_bin_install/ltfsa_cli\n\n" >> makefile
 #
 #End of the story
