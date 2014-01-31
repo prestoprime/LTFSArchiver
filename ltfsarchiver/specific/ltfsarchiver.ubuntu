@@ -34,7 +34,7 @@
 
 
 PROG="ltfsarchiver"
-PROG_PATH="_LTFSACHIVER_HOME_sbin"
+PROG_PATH="_LTFSACHIVER_HOME_/sbin"
 PID_PATH="/var/run"
 
 start() {
