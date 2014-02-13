@@ -130,10 +130,10 @@ endif
 if ( "$date" != null ) then
 	set options = "$options&Date=$date" 
 else
-	if ( "$fromdate != null ) then
+	if ( "$fromdate" != null ) then
 		set options = "$options&FromDate=$fromdate" 
 	endif
-	if ( "$todate != null ) then
+	if ( "$todate" != null ) then
 		set options = "$options&ToDate=$todate" 
 	endif
 endif

@@ -52,10 +52,10 @@ end
 #
 #Sanity Check
 #
-if ( $help || "$taskid" == null || (  "$output" != "XML" && "$output" != "JSON" )  ) then
+if ( $help ||  (  "$output" != "XML" && "$output" != "JSON" )  ) then
 	echo
 	echo "\tUsage:"
-	echo "\t$this [-f|--Output XML|JSON] [-o <outfile>] [-h|--help] -t|--TaskID <TaskID>"
+	echo "\t$this [-f|--Output XML|JSON] [-o <outfile>] [-h|--help]"
 	echo
 	exit 400
 endif
