@@ -13,10 +13,10 @@ WORK IN PROGRESS
 
 Provisional documents about Configuration, Installation, and API Summary (subject to change)
 
-[LTFSArchiver Installation](http://htmlpreview.github.com/?http://github.com/prestoprime/LTFSArchiver/blob/master/ltfsarchiver/InstallInstructions.txt)
+[LTFSArchiver Installation](http://htmlpreview.github.com/?http://github.com/prestoprime/LTFSArchiver/blob/master/ltfsarchiver/LTFSArchiverInstallation_1.3.txt)
 
-[LTFSArchiver Installation - ODT](http://htmlpreview.github.com/?http://github.com/prestoprime/LTFSArchiver/blob/master/ltfsarchiver/documentation/LTFSArchiverInstallation.odt)
+[LTFSArchiver Installation](http://htmlpreview.github.com/?http://github.com/prestoprime/LTFSArchiver/blob/master/ltfsarchiver/documentation/LTFSArchiverInstallation_1.3.doc)
 
-[LTFSArchiver Configuration](http://htmlpreview.github.com/?http://github.com/prestoprime/LTFSArchiver/blob/master/ltfsarchiver/documentation/LTFSArchiverConfiguration.odt)
+[LTFSArchiver Configuration](http://htmlpreview.github.com/?http://github.com/prestoprime/LTFSArchiver/blob/master/ltfsarchiver/documentation/LTFSArchiverConfiguration_1.3.doc)
 
 [LTFSArchiver API Summary] (http://htmlpreview.github.com/?http://github.com/prestoprime/LTFSArchiver/blob/master/ltfsarchiver/documentation/ArchiverAPIsummary.docx)
