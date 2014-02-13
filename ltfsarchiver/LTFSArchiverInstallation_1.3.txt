@@ -1,0 +1,248 @@
+LTFSArchiver 1.3 installation
+General information
+
+This version does not provide rpms or other packaged way for the installation on 
+specific Linux distributions.
+The tool has been successfully installed and tested on Centos 5.x and later and 
+Ubuntu 10.04 and later distributions, but there are not particular reasons that 
+prevent the usage on other distributions.
+The installation is easy and assisted by a scripts that has to be launched 
+following step by step these instructions:
+
+1. It is suggested to use a Centos distribution, a minimal server installation 
+is enough but also a more complete (even desktop) installation works fine.
+2. Check that the appropriate driver for the library/ies and/or tape/s are 
+correctly installed. 
+Till now HP libraries and drives and IBM drives have been tested, the drivers 
+are freely downloadable from the respective websites.
+Some tests can be done using mt (drives) and mtx (libraries) commands, so please 
+install mt and mtx (under Centos the rpms are named mtx and mt-st) before and 
+then try some commands like:
+mt -f /dev/st0 rewind   (rewinds the tape inserted into th edrive st0)
+mtx  -f /dev/sg5 load 1 0  (loads tape 1 into drive 0)
+3. Check that the appropriate LTFS driver is correctly installed, for installation 
+please refer to software and procedures from the hardware supplier.
+An easy way to check that all is working properly is trying to mount an LTFS tape 
+with a command like:
+ ltfs -o devname=/dev/st0 /mnt/ltfs   (mounts a LTFS tape inserted into drive st0 
+to the  local folder /mnt/ltfs)
+Another usefule test is to format a blank tape with a command like:
+mkltfs  -d /dev/st0 (format with default parameters a blank tape inserted into 
+drive st0)
+
+4. Check these 3rd parties dependencies are installed:
+a. mt and mtx
+b. postgresql database server
+c. apache web server
+d. libxml2 package
+e. python (used to convert XML output into JSON format)
+f. xmltodict and json python modules
+
+Choose installation method
+
+LTFSArchiver can now be installed in two different ways:
+
+a) 	Starting the script "setup.sh" that you can find in the directory with 
+b) 	Proceeding with a step-by-step manual configuration as further described
+
+In both cases, you need to understand some of the concepts about the parameters
+that setup process will ask/set.
+
+LTFSARCHIVER_HOME
+It's the directory where scripts, API's and other files will be placed
+The default assumed by setup script is /opt/ltfsarchiver
+
+LTFSARCHIVER_USER and LTFSARCHIVER_GROUP
+They're the username and usegroup that LTFSArchiver uses to access DB and to 
+mount LTFS tapes.
+So LTFSARCHIVER_USER must be created as a system user AND as a postgresql user
+The default assumed by setup script is pprime (pwd=pprime09)
+
+LTFSARCHIVER_MODE
+It represents the running mode of the server and it influences the dispatching 
+process of tasks.
+Three modes are available (config mode in brackets)
+
+(B)oth: LTFSArchiver will assume that at least a tape library is connected. 
+	When a specific tape is needed, it will be searched in the library at first;
+	if it is not found, the task will be assigned to an external tape and it
+	will require a manual tape load
+
+(M)anual: LTFSArchiver will assume that all of the configured tape dvices are 
+	manually managed, When a specific tape is needed, it will NOT be searched,
+	the task will be assigned to an external tape and it will require a manual 
+	tape load
+
+(C)hanger-only: LTFSArchiver will assume that all configured tape devices are
+	managed by a tape library. When a specific tape is needed, it will be searched
+	in the library; if it is not found, the task will fail.
+
+
+
+Downloading and extracting installation package.
+
+After you have downloaded the package (in .zip o .tgz format) extract its content
+into a temporary directory; use -d (unzip) or -C (tar) option to extract files into
+the selected directory, according to your preference and file type.
+
+i.e:
+tar -zxf ltfsarchiver-install-1.3.tgz -C /tmp
+and
+unzip ltfsarchiver-install-1.3.zip -d /tmp
+
+will both create a /tmp/ltfsa_master directory on you file system
+
+move to /tmp/ltfsa_master/ltfsarchiver and proceed with your preferred installation 
+method
+
+Using LTFSArchiver setup script
+
+After moving into ltfsarchiver_master/ltfsarchiver newly created directory start 
+the setup script:
+	./setup.sh
+
+A set of checks will be performed to verify that needed services/utilities/python
+modules are installed. If something is missing, an error message will be printed and 
+setup will break
+
+Then you will be prompted to supply the following parameters:
+
+Base installation directory
+	You will have to enter the directory where you want to create "ltfsarchiver" 
+	one
+	If you want to install into /usr/local/ltfsarchiver, enter "/usr/local"
+	The default value is "/opt"; if you want to accept the default,
+	simply press ENTER
+
+LTFSArchiver user
+	You will have to enter the name of the name of the system user that 
+	LTFSArchiver will use
+	If the user does not still exist, you will be prompted to enter 
+	the password too.
+	The default values are "pprime" and "pprime09"; if you want to accept 
+	the default, simply press ENTER
+
+LTFSArchiver running mode
+	You will have to enter the running mode (as described before) 
+	of LTFSArchiver
+	The default is "B"; if you want to accept the default, simply press ENTER
+	
+A resume of the entered values will be shown, allowing you to:
+- Change value(s)
+- Execute installation
+- Exit from installation
+
+If you confirm the entered values, setup will proceed and you will be finally
+prompted to chooes if you want (or not) to execute a specific script that will
+try to guess the tape library and tape device configuration
+This can be however run later (or whenever you want) launching the script
+guess_conf.sh located in the sbin/utils subdirectory.
+
+When the install script say "All done" you will be able to start LTFSArchiver server.
+If needed, change now other configuration values (refer to LTFSArchiverConfiguration)
+
+- issue a reload command to httpd daemon to load the newly added web service
+	service apache2 reload (Ubuntu)
+	service httpd reload (CentOS)
+- issue a start command to ltfsarchiver server
+	service ltfsarchiver start
+
+Finally check that server is working as desired.
+
+use a browser to access URL 
+	http://IP_ADDRESS/ltfsarchiver
+	A welcome page should appear
+
+use a browser to access URL 
+	http://IP_ADDRESS/ltfsarchiver/cgi-bin/QueryTask.
+	An XML file shoul be delivered, saying that no task has been found
+
+
+
+
+
+LTFSArchiver full manual installation
+
+Login as root user
+
+Move to /ltfsa_master directory  (you just created it inflating zip o tar file)
+and copy the whole ltfsarchiver directory to its final place.
+i:e:
+cp -pr ltfsarchiver /opt
+
+In the above sample, /optltfsarchiver will be your LTFSARCHIVER_HOME
+
+If not already created, create the LTFSArchiver system user (see LTFSARCHIVER_USER
+definition)
+useradd LTFSARCHIVER_USER
+passwd  LTFSARCHIVER_USER
+
+Switch to postgres user to create a Postgres user with same name as LTFSARCHIVER_USER
+
+su - postgres
+createuser -d LTFSARCHIVER_USER  
+
+logout to root
+
+Switch to LTFSARCHIVER_USER to create/initialize the database.
+
+su - LTFSARCHIVER_USER
+createdb ltfsarchiver
+psql -d ltfsarchiver -f LTFSARCHIVER_HOME/sbin/utils/DB_pprimelto_schema.sql
+
+logout to root
+
+Modify the main configuration file:
+
+/LTFSARCHIVER_HOME/conf/ltfsarchiver.conf
+you must at least edit placeholders for the following parameters:
+	LTFSARCHIVER_MODE
+	LTFSARCHIVER_HOME
+	LTFSARCHIVER_USER
+	LTFSARCHIVER_GROUP
+with actual values.
+
+If needed, change other values (refer to LTFSArchiverConfiguration doc)
+
+If you want, check the device configuration (libraries and lto units) using the
+   "guessconfig script": 
+/LTFSARCHIVER_HOME/sbin/utils/guess_conf.sh
+the script will check and (if needed and approved) override the base configuration
+
+
+Create a startup script named ltfsarchiver in /etc/init.d directory
+Both CentOS/Ubuntu sample files are available in /LTFSARCHIVER_HOME/specific:
+ltfsarchiver.centos
+ltfsarchiver.ubuntu
+
+To use the samples, change _LTFSARCHIVER_HOME_ placeholder with the actual value
+
+Add the ltfsarchive service to the startup manager, using the proper command,
+according to your OS distro:
+update-rc.d ltfsarchiver start 90 3 5 . stop 90 0 1 2 4 6 . (Ubuntu)
+chkconfig --add ltfsarchiver (CentOS)
+
+Create a file named ltfsarchiver.conf into proper directory (/etc/httpd/conf.d 
+if running CentOS, /etc/apache2/conf.d if running Ubuntu) to make httpd able 
+to know where LTFSArchiver web API's are placed.
+A sample file (/LTFSARCHIVER_HOME/specific/ltfsarchiver.conf) is available
+change _LTFSARCHIVER_HOME_ with the actual value
+restart httpd service:
+/etc/init.d/apache2 restart (Ubuntu)
+/etc/init.d/httpd restart (CentOS)
+
+Create a script file in /etc/cron.daily to enable log/dbbackup/report directories 
+cleaning.
+A sample file (/LTFSARCHIVER_HOME/specific/ltfsarchiver.cron.daily) is available
+change _LTFSARCHIVER_HOME_ with the actual value
+
+Start the LTFSArchive service:
+/etc/init.d/ltfsarchiver start
+
+Finally check that server is working as desired.
+use a browser to access URL 
+	http://IP_ADDRESS/ltfsarchiver
+	A welcome page should appear
+use a browser to access URL 
+	http://IP_ADDRESS/ltfsarchiver/cgi-bin/QueryTask.
+	An XML file shoul be delivered, saying that no task has been found
