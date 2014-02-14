@@ -33,8 +33,6 @@ else
 			XMLOUTPUT=$XMLOUTPUT$indent'<Drive device="'$1'" use="false"/>'"\n"
 		;;
 		*)
-			#USEDBY=`$CMD_DB" select inuse from lto_info where label='"${DEVDATA[1]}"';" | tr -d ' ' | tr '|' ' '`
-			#XMLOUTPUT=$XMLOUTPUT$indent'<Drive device="'$1'" use="true" service="'$( get_service $USEDBY )'" TapeID="'${DEVDATA[1]}'"/>'"\n"
 			XMLOUTPUT=$XMLOUTPUT$indent'<Drive device="'$1'" use="true" TapeID="'${DEVDATA[1]}'"/>'"\n"
 		;;
 	esac
@@ -47,14 +45,16 @@ fi
 command=`basename $0`
 PARM=$QUERY_STRING
 RECEIVEDTIME=`date +'%Y-%m-%dT%H:%M:%S'`
-VALIDPARMS="TapeDevice|PoolName|FromGUI|Output"
+VALIDPARMS="Device|PoolName|FromGUI|Output"
 output=$( get_parameter Output )
 normalize_output
 get_supplied_parameters
-tapedevice=$( get_parameter TapeDevice )
+tapedevice=$( get_parameter Device )
 guicall=$( get_parameter FromGUI )
 XMLOUTPUT="\t"'<Output>'"\n"
 exitcode="200"
+#	parto a false... lo porto a true quando trovo il device o se cerco su tutti
+tapefound=false
 if [ -z $output ]; then
         output=`echo $LTFSARCHIVER_OUTPUT | tr '[A-Z]' ' [a-z]'`
         PARM=$PARM'&Output='$output
@@ -62,8 +62,6 @@ fi
 if ! [ -z "$BADPARMS" ]; then
         unset XMLOUTPUT; exitcode="400"; message="${BADPARMS}"
 else
-	#	parto a false... lo porto a true quando trovo il device o se cerco su tutti
-	tapefound=false
 	if [ -z "$tapedevice" ]; then
 		tapefound=true
 		#	Quelli in librerie...
@@ -100,13 +98,12 @@ else
 			fi
 		done
 	fi
-fi
-if ! $tapefound; then
-	unset $XMLOUTPUT
-	exitcode="400"; message="TapeDevice $tapedevice not found"
-else
-	XMLOUTPUT=$XMLOUTPUT"\t"'</Output>'"\n"
-
+	if ! $tapefound; then
+		unset XMLOUTPUT
+		exitcode="400"; message="Device $tapedevice not found"
+	else
+		XMLOUTPUT=$XMLOUTPUT"\t"'</Output>'"\n"
+	fi
 fi
 crea_xml_answer
 send_output

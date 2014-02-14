@@ -41,11 +41,11 @@ fi
 command=`basename $0`
 PARM=$QUERY_STRING
 RECEIVEDTIME=`date +'%Y-%m-%dT%H:%M:%S'`
-VALIDPARMS="TapeDevice|FromGUI|Output"
+VALIDPARMS="Device|FromGUI|Output"
 output=$( get_parameter Output )
 normalize_output
 get_supplied_parameters
-tapedevice=$( get_parameter TapeDevice )
+tapedevice=$( get_parameter Device )
 guicall=$( get_parameter FromGUI )
 callingtime=`date '+%Y-%m-%d %H:%M:%S'`
 if [ -z $output ]; then
@@ -57,7 +57,7 @@ if ! [ -z "$BADPARMS" ]; then
 	exitcode="400"; message="${BADPARMS}"
 else
 	if [ -z "$tapedevice" ]; then
-		exitcode="400"; message='TapeDevice not supplied'
+		exitcode="400"; message='Device not supplied'
 	else
 		# verifico che il device sia gestito dal sistema
 		devices_list
@@ -82,7 +82,7 @@ else
 				fi
 			fi
 		else
-			exitcode=400; message="TapeDevice $tapedevice does not exist"
+			exitcode=400; message="Device $tapedevice does not exist"
 		fi
 	fi
 fi
