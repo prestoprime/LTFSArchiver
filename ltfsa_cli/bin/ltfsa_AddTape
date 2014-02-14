@@ -68,7 +68,7 @@ end
 #
 #Sanity Check
 #
-if ( $help || "$tapeid" == null  || ( "$output" != "XML" && "$output" != "JSON" ) ) then
+if ( $help || "$tapeid" == null  || ( "$output" != "XML" && "$output" != "JSON" ) || ( "$format" != "Y" && "$format" != "F" && "$format" != "N" ) ) then
 	echo
 	echo "\tUsage:"
 	echo "\t$this [-f|--Output XML|JSON] [-o <outfile>] [-p|--PoolName <PoolName>] [-F|Y|N (--force|format|no-format)] [-h|--help] -t|--TapeID <TapeID>"
@@ -78,7 +78,7 @@ endif
 #
 #Calling the service
 #
-curl $curloptions "$ltfsaserverurl/$service?Output=$output&TapeID=$tapeid&PoolName=$poolname" -o $pdir/logs/$this.$$.out >& $pdir/logs/$this.$$.log
+curl $curloptions "$ltfsaserverurl/$service?Output=$output&TapeID=$tapeid&PoolName=$poolname&Format=$format" -o $pdir/logs/$this.$$.out >& $pdir/logs/$this.$$.log
 set ret = $?
 if ( $ret ) then
 	echo "$this got $ret"

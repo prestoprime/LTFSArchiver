@@ -201,6 +201,7 @@ echo $curloptions > config/curloptions
 echo $ltfsaserverurl > config/ltfsaserverurl
 echo $output > config/output
 echo $poolname > config/poolname
+echo $format > config/format
 #
 #Creating ltfsa_cli shell
 cat license.h > bin/ltfsa_cli
