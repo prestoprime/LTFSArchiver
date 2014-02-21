@@ -86,7 +86,7 @@ fi
 test_passed=true
 if ! [ -z "$BADPARMS" ]; then
         exitcode="400"; message="${BADPARMS}"
-        test_passed="f"
+        test_passed=false
 fi
 #	Controlli
 #		LTFSAction
@@ -225,16 +225,16 @@ if $test_passed; then
 	if ! [ -z $poolname ]; then
 		if [ $( poolexists $poolname ) == 0 ]; then
 			exitcode=400; message="Pool $poolname does not exist"
-			test_passed="f"
+			test_passed=false
 		fi 
 	fi
 fi
 #		TapeID
 if $test_passed; then
 	if ! [ -z $tapeid ]; then
-		if ! [ $( tapeexists $tapeid ) == 0 ]; then
-			exitcode=400; message="Pool $poolname does not exist"
-			test_passed="f"
+		if [ $( tapeexists $tapeid ) == 0 ]; then
+			exitcode=400; message="Tape $tapeid does not exist"
+			test_passed=false
 		fi 
 	fi
 fi

@@ -28,7 +28,6 @@ if ( !($?pdir) ) then
 	echo
 	exit 99
 endif
-set taskid = null
 set tapeid = null
 set ltfsaction = null
 set taskstatus = null
@@ -46,10 +45,7 @@ set service = `echo $this | sed -e s/ltfsa_//`
 set help = 0
 set i = 1
 while ( $i <= $#argv )
-	if ( "$argv[$i]" == "-T" || "$argv[$i]" == "--TaskID" ) then
-		@ i++
-		set taskid = "$argv[$i]"
-	else if ( "$argv[$i]" == "-t" || "$argv[$i]" == "--TapeID" ) then
+	if ( "$argv[$i]" == "-t" || "$argv[$i]" == "--TapeID" ) then
 		@ i++
 		set tapeid = "$argv[$i]"
 	else if ( "$argv[$i]" == "-s" || "$argv[$i]" == "--Status" ) then
@@ -97,11 +93,11 @@ if ( $help || "$output" != "XML" && "$output" != "JSON"  ) then
 	echo
 	echo "\tUsage:"
 	echo "\t$this [-f|--Output XML|JSON] [-o <outfile>] [-t|--TapeID <TapeID>] [-p|--PoolName <PoolName>] [-s|--Status <status>]"
-	echo "\t\t [-T|--TaskID <TaskID>] [-N|--FileName <FileName>] [--exact|--like] [-A|--LTFSAction <action>"
+	echo "\t\t [-N|--FileName <FileName>] [--exact|--like] [-A|--LTFSAction <action>"
 	echo "\t\t [--fromdate <date> --todate <date>| --date <date>]"
 	echo "\t\t [-h|--help]"
-	echo "\t\t where status = "
-	echo "\t\t where action = "
+	echo "\t\t where status = completed|running|waiting|fallout"
+	echo "\t\t where action = AddTape|Checksum|ListTape|MakeAvailableMount|MakeAvailableUnmount|RestoreFromLTO|WriteToLTO"
 	echo
 	exit 400
 endif
@@ -111,9 +107,6 @@ endif
 set options = ""
 if ( "$tapeid" != null ) then
 	set options = "$options&TapeID=$tapeid" 
-endif
-if ( "$taskid" != null ) then
-	set options = "$options&TaskID=$taskid" 
 endif
 if ( "$poolname" != null ) then
 	set options = "$options&PoolName=$poolname" 

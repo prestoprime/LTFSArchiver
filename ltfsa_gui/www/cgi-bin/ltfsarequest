@@ -1,0 +1,91 @@
+#!/bin/tcsh -f
+#
+#  ltfsa_cli
+#  Version: 0.0.1
+#  Authors: L. Boch
+#
+#  Copyright (C) 2013-2014 RAI - Radiotelevisione Italiana <cr_segreteria@rai.it>
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU Affero General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU Affero General Public License for more details.
+#
+# You should have received a copy of the GNU Affero General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
+set echo_style = both
+set this = `basename $0`
+if ( !($?pdir) ) then
+	echo
+	echo "$this Error "
+	echo "\tVariable 'pdir' must be defined in environment"
+	echo
+	exit 99
+endif
+set curloptions = `cat $pdir/config/curloptions`
+set ltfsaserverurl = `cat $pdir/config/ltfsaserverurl`
+set output = `cat $pdir/config/output`
+echo "content-type: text/html\n"
+if ( $REQUEST_METHOD != "GET" ) then
+	echo "400"
+	echo "Bad request "
+	echo "$this accept only GET"
+	exit 99
+endif
+set inquery = `echo $QUERY_STRING | cut -d'&' -f1- --output-delimiter=' ' | cut -d'=' -f1- --output-delimiter=' '`
+set inquery = `$pdir/bin/clean.querystring $inquery`
+set service = null
+set ltfsaquery = ""
+set i = 1
+while ( $i < $#inquery )
+        if ( "$inquery[$i]" == "service" ) then
+                @ i++
+                set service = "$inquery[$i]"
+	else
+                set var = "$inquery[$i]"
+                @ i++
+                set value = "$inquery[$i]"
+		if ( "$value != "null" && ( "$var" == "TaskID" || "$var" == "TapeID" ||| "$var" == "PoolName" ||| "$var" == "FileName" || "$var" == "Checksum" || "$var" == "ChecksumFile" || "$var" == "DestPath" || "$var" == "Date" || "$var" == "FromDate" || "$var" == "ToDate" || "$var" == "Status" || "$var" == "LTFSAction" || "$var" == "Format" ) ) then
+		set ltfsaquery = "$ltfsaquery&$var=$value"
+        else
+		echo "400"
+		echo "Bad request "
+		echo "$this unknown $var"
+                exit 1
+        endif
+        @ i++
+end
+#
+#Sanity Check
+#
+#
+#Calling the service
+#
+curl $curloptions "$ltfsaserverurl/$service?Output=${output}${ltfsaquery}" -o $pdir/logs/$this.$$.out >& $pdir/logs/$this.$$.log
+set ret = $?
+	echo "500"
+	echo "Server Error"
+	echo "$this failed on ltfsa service $service with $ltfsaquery."
+	exit 2
+endif
+#
+#Filtering XML Output through our best XSL
+#
+xsltproc $pdir/xsl/ltfsa_gui.xsl $pdir/logs/$this.$$.out > $pdir/logs/$this.$$.html
+set ret = $?
+	echo "500"
+	echo "Server Error"
+	echo "$this failed on processing the output ofltfsa service $service with $ltfsaquery."
+	exit 3
+endif
+cat $pdir/logs/$this.$$.html
+#
+#End of the story
+#
+exit 0
