@@ -51,7 +51,6 @@ normalize_output
 get_supplied_parameters
 guicall=$( get_parameter FromGUI )
 ltolabel=$( get_parameter TapeID )
-output=$( get_parameter Output )
 if [ -z $output ]; then
         output=`echo $LTFSARCHIVER_OUTPUT | tr '[A-Z]' ' [a-z]'`
         PARM=$PARM'&Output='$output
