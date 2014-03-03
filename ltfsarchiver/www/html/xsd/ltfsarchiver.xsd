@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!-- edited with XMLSpy v2007 rel. 3 (http://www.altova.com) by BOCH LAURENT (RAI TELEVISIONE ITALIANA SPA) -->
-<xsd:schema xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:xlink="http://www.w3.org/1999/xlink" elementFormDefault="qualified" attributeFormDefault="unqualified" version="2013-12-09T15:00:00">
+<xsd:schema xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:xlink="http://www.w3.org/1999/xlink" elementFormDefault="qualified" attributeFormDefault="unqualified" version="2014-03-03T12:30:00">
 	<xsd:import namespace="http://www.w3.org/1999/xlink" schemaLocation="http://www.loc.gov/standards/xlink/xlink.xsd"/>
 	<xsd:attributeGroup name="basicReplyAttrs">
 		<xsd:attribute name="exit_code" type="xsd:integer" use="required"/>
@@ -46,7 +46,7 @@
 				</xsd:attribute>
 				<xsd:attribute name="expectedvalue" type="xsd:string"/>
 				<xsd:attribute name="value" type="xsd:string" use="required"/>
-				<xsd:attribute name="lastChecked" type="xsd:dateTime" />
+				<xsd:attribute name="lastChecked" type="xsd:dateTime"/>
 				<xsd:attribute name="match" type="xsd:boolean"/>
 			</xsd:extension>
 		</xsd:complexContent>
@@ -164,9 +164,12 @@
 			<xsd:simpleType>
 				<xsd:restriction base="xsd:string">
 					<xsd:enumeration value="idle"/>
-					<xsd:enumeration value="busy for writing"/>
-					<xsd:enumeration value="busy for reading"/>
-					<xsd:enumeration value="busy for make available"/>
+					<xsd:enumeration value="busy for AddTape"/>
+					<xsd:enumeration value="busy for Checksum"/>
+					<xsd:enumeration value="busy for ListTape"/>
+					<xsd:enumeration value="busy for MakeAvailable"/>
+					<xsd:enumeration value="busy for RestoreFromLTO"/>
+					<xsd:enumeration value="busy for WriteToLTO"/>
 				</xsd:restriction>
 			</xsd:simpleType>
 		</xsd:attribute>
