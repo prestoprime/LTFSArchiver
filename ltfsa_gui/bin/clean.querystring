@@ -1,0 +1,29 @@
+#!/bin/tcsh -f
+#
+#  ltfsa_gui
+#  Version: 0.0.1
+#  Authors: L. Boch
+#
+#  Copyright (C) 2013-2014 RAI - Radiotelevisione Italiana <cr_segreteria@rai.it>
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU Affero General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU Affero General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+set i = 1
+while ( $i <= $#argv )
+	echo "$argv[$i]" | sed -e s/'%3A'/':'/g | sed -e s/'%2F'/'\/'/g | sed -e s/'%23'/'#'/g | sed -e s/'%2C'/','/g|sed -e s/'%3B'/';'/g| sed -e s/'+'/'\&nbsp;'/g| sed -e s/'%3D'/'='/g| sed -e s/'%0D%0A'/'\\n'/g|sed -e s/'%28'/'('/g|sed -e s/'%29'/')'/g|sed -e s/'%26'/'\&'/g|sed -e s/'%3F'/'?'/g
+	@ i++
+end
+exit 0
+
+
+

@@ -50,16 +50,13 @@ while ( $i < $#inquery )
                 set var = "$inquery[$i]"
                 @ i++
                 set value = "$inquery[$i]"
-		if (  "$var" == "TaskID" || "$var" == "TapeID" || "$var" == "PoolName" || "$var" == "FileName" || "$var" == "Checksum" || "$var" == "ChecksumFile" || "$var" == "DestPath" || "$var" == "Date" || "$var" == "FromDate" || "$var" == "ToDate" || "$var" == "Status" || "$var" == "LTFSAction" || "$var" == "Format" || "$var" == "Device" )  then
-			if ( "$value" != "null" ) then
-				set ltfsaquery = "$ltfsaquery&$var=$value"
-			endif
-		else
-			echo "400"
-			echo "Bad request "
-			echo "$this unknown $var=$value"
-       		        exit 1
-		endif
+		if ( "$value != "null" && ( "$var" == "TaskID" || "$var" == "TapeID" ||| "$var" == "PoolName" ||| "$var" == "FileName" || "$var" == "Checksum" || "$var" == "ChecksumFile" || "$var" == "DestPath" || "$var" == "Date" || "$var" == "FromDate" || "$var" == "ToDate" || "$var" == "Status" || "$var" == "LTFSAction" || "$var" == "Format" ) ) then
+		set ltfsaquery = "$ltfsaquery&$var=$value"
+        else
+		echo "400"
+		echo "Bad request "
+		echo "$this unknown $var"
+                exit 1
         endif
         @ i++
 end
@@ -71,7 +68,6 @@ end
 #
 curl $curloptions "$ltfsaserverurl/$service?Output=XML${ltfsaquery}" -o $pdir/logs/$this.$$.out >& $pdir/logs/$this.$$.log
 set ret = $?
-if ( $ret ) then
 	echo "500"
 	echo "Server Error"
 	echo "$this failed on ltfsa service $service with $ltfsaquery."
@@ -82,7 +78,6 @@ endif
 #
 xsltproc $pdir/xsl/ltfsa_gui.xsl $pdir/logs/$this.$$.out > $pdir/logs/$this.$$.html
 set ret = $?
-if ( $ret ) then
 	echo "500"
 	echo "Server Error"
 	echo "$this failed on processing the output ofltfsa service $service with $ltfsaquery."

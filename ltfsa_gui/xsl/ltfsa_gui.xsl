@@ -26,7 +26,11 @@
 
 
 <xsl:template match="/LTFSArchiver">
-	<html><head></head><body>
+<html>
+	<head>
+		<link href="/ltfsa_gui/css/1.css" type="text/css" rel="stylesheet"/>
+	</head>
+  <body>
 	<div>
 	<h3>LTFSArchiver</h3>
 	<xsl:if test="@ltfsaVersion">
@@ -34,20 +38,21 @@
 	</xsl:if>
 	</div>
 	<div style="clear:both">
-	<xsl:apply-templates match="ReceivedRequest"/>
-	<xsl:apply-templates match="Response"/>
+	<xsl:apply-templates select="ReceivedRequest"/>
+	<xsl:apply-templates select="Response"/>
 	</div>
 	<div style="clear:both">
-	<xsl:apply-templates match="Output"/>
+	<xsl:apply-templates select="Output"/>
 	</div>
-	</body></html>
+  </body>
+</html>
 </xsl:template>
 <!-- ***************************************** -->
 <xsl:template match="ReceivedRequest|Request">
 	<div style="float:left">
 		<h4><xsl:value-of select="@service"/></h4>
 		<small><xsl:value-of select="@time"/></small>
-		<xsl:apply-templates match="Parameter"/>
+		<xsl:apply-templates select="Parameter"/>
 	</div>
 </xsl:template>
 <!-- ***************************************** -->
@@ -83,8 +88,8 @@
 </xsl:template>
 <!-- ***************************************** -->
 <xsl:template match="Mount">
-	<div style="float:left"><p><xsl:value-of select="<@device"/>
-	<xsl:if test="@path">: <xsl:value-of select="<@path"/></xsl:if>
+	<div style="float:left"><p><xsl:value-of select="@device"/>
+	<xsl:if test="@path">: <xsl:value-of select="@path"/></xsl:if>
 	<xsl:if test="@readonly='true'"> (ro)</xsl:if>
 	</p>
 	</div>
@@ -137,7 +142,6 @@
 		</xsl:otherwise>
 		</xsl:choose>
 	</form>
-	</xsl:if>
 	</div>
 </xsl:template>
 <!-- ***************************************** -->
@@ -177,8 +181,8 @@
 	<xsl:value-of select="@freeMB"/>MB free out of  <xsl:value-of select="@sizeMB"/>MB total<br/>
 	<xsl:choose><xsl:when test="@writeEnable='false'">Write protected.<br/></xsl:when>
 		<xsl:otherwise>Write enabled.<br/></xsl:otherwise></xsl:choose>
-	<xsl:if test="@status'">Status: <xsl:value-of select="@status"/><br/></xsl:if>
-	<xsl:if test="@lastModified'">Last modified: <xsl:value-of select="@lastModified"/><br/></xsl:if>
+	<xsl:if test="@status">Status: <xsl:value-of select="@status"/><br/></xsl:if>
+	<xsl:if test="@lastModified">Last modified: <xsl:value-of select="@lastModified"/><br/></xsl:if>
 	</p>	
 	<xsl:variable name="nummp"><xsl:value-of select="count(MountPending)"/></xsl:variable>
 	<xsl:choose>

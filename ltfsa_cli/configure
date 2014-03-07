@@ -79,7 +79,7 @@ if ( -ersf config/checksum ) then
 else
 	set checksum = N
 endif
-if ( -ersf config/inumber ) then
+if ( -ersf config/ltfsaserverurl ) then
 	set ltfsaserverurl = `cat config/ltfsaserverurl`
 else
 	set ltfsaserverurl = "http://localhost/ltfsarchiver/cgi-bin"
@@ -188,11 +188,11 @@ end
 # Sanity check
 set isuser = `grep -c $ltfsa_cli_user /etc/passwd`
 if ( !($isuser) ) then
-	echo "\n${this}: ltfsa_clir_user $ltfsa_cli_user not found"
+	echo "\n${this}: ltfsa_cli_user $ltfsa_cli_user not found"
 	exit 2
 endif
 if ( !(-erx $ltfsa_cli_bin_install) ) then
-	echo "\n${this}: ltfsa_clir_bin_install $ltfsa_cli_bin_install not found"
+	echo "\n${this}: ltfsa_cli_bin_install $ltfsa_cli_bin_install not found"
 	exit 2
 endif
 #Writing config
@@ -216,7 +216,7 @@ if ( -ersf makefile ) then
 	cp makefile makefile.bak
 endif
 cat license.h > makefile
-echo "install:\n\tmkdir logs\n\tchmod ugo+w logs\n\tinstall bin/ltfsa_cli $ltfsa_cli_bin_install/\n\n" >> makefile
+echo "install:\n\tmkdir -p logs\n\tchmod ugo+w logs\n\tinstall bin/ltfsa_cli $ltfsa_cli_bin_install/\n\n" >> makefile
 echo "uninstall:\n\trm -f $ltfsa_cli_bin_install/ltfsa_cli\n\n" >> makefile
 #
 #End of the story

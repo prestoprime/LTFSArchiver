@@ -1,0 +1,228 @@
+#!/bin/tcsh -f
+#
+#  ltfsa_gui
+#  Version: 0.0.1
+#  Authors: L. Boch
+#
+#  Copyright (C) 2013-2014 RAI - Radiotelevisione Italiana <cr_segreteria@rai.it>
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU Affero General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU Affero General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+# Configuration is made of:
+#	ltfsa_gui_httpd.conf
+#	makefile
+#	config/ 
+#		ltfsaserverurl
+#		curloptions
+#		mapprefixes (not supported in this version)
+#
+# ./configure can be used for preparing the installion or for modifying an existing configuration
+#
+# DEPENDENCIES: tcsh, curl, apache2, xsltproc 
+#	cannot solve tcsh as it's required for running the script (apt-get install tcsh)
+# RECOMMENDED: xsltproc, tofrodos (fromdos), gridsite-clients (urlencode), libxml2-utils)
+# recommended are not checked
+#
+# STEPS: checking dependencies, checking pre-existing configuration, parsing user inputs, creating or updating configuration
+#
+set echo_style = both
+set this = `basename $0`
+cd `dirname $0`
+set ltfsa_gui_dir = `pwd`
+#
+#	Checking dependencies
+#
+set statusOK = "Status: install ok installed"
+set status = `dpkg -s apache2|grep Status:`
+if ( "$status" != "$statusOK" ) then
+	echo "apache2 not found. Try apt-get install apache2"
+	exit 1
+endif
+set status = `dpkg -s xsltproc|grep Status:`
+if ( "$status" != "$statusOK" ) then
+	echo "xsltproc not found. Try apt-get install xsltproc"
+	exit 1
+endif
+set status = `dpkg -s curl|grep Status:`
+if ( "$status" != "$statusOK" ) then
+	echo "curl not found. Try apt-get install curl"
+	exit 1
+endif
+#set status = `dpkg -s tofrodos|grep Status:`
+#if ( "$status" != "$statusOK" ) then
+#	echo "tofrodos not found. Try apt-get install tofrodos"
+#	exit 1
+#endif
+#set status = `dpkg -s gridsite-clients|grep Status:`
+#if ( "$status" != "$statusOK" ) then
+#	echo "gridsite-clients not found. Try apt-get install gridsite-clients"
+#	exit 1
+#endif
+#set status = `dpkg -s libxml2-utils|grep Status:`
+#if ( "$status" != "$statusOK" ) then
+#	echo "libxml2-utils not found. Try apt-get install libxml2-utils"
+#	exit 1
+#endif
+echo "Dependencies okayed. Running check of existing configuration"
+if ( -ersf ltfsa_gui-http.conf ) then
+	cp -v ltfsa_gui-http.conf ltfsa_gui-http.conf.bak
+	set ltfsa_gui_dir_old = `grep "SetEnv pdir" ltfsa_gui-http.conf | cut -f3 -d' '`
+	if ( $ltfsa_gui_dir != $ltfsa_gui_dir_old ) then
+		echo "Wrong setting. Corrected $ltfsa_gui_dir"
+	endif
+endif
+if ( -ersf config/ltfsaserverurl ) then
+	set ltfsaserverurl = `cat config/ltfsaserverurl`
+else
+	set ltfsaserverurl = "http://localhost/ltfsarchiver/cgi-bin"
+endif
+if ( -ersf config/curloptions ) then
+	set curloptions = `cat config/curloptions`
+else
+	set curloptions = "--insecure --connect-timeout 10 -m 60 --retry 2"
+endif
+set ltfsa_gui_user = `whoami`
+#
+set apachehtmldir = /var/www/html
+set apachecgibindir = /var/www/cgi-bin
+set apacheconfigdir = /etc/apache2/conf.d
+set apachehtpasswdcmd = htpasswd
+set apacheuser = www-data
+
+# generic parsing of input
+set i = 1
+while ( $i <= $#argv )
+#		checksum
+#		curloptions
+#		ltfsaserverurl
+#		output
+#		poolname
+        if ( "$argv[$i]" == "-h" || "$argv[$i]" == "--help" ) then
+#		write help
+		echo "$this usage:"
+		echo "\t\t--apachecgibindir ($apachecgibindir)"
+		echo "\t\t--apacheconfigdir ($apacheconfigdir)"
+		echo "\t\t--apachehtmldir ($apachehtmldir)"
+		echo "\t\t--apachehtpasswdcmd ($apachehtpasswdcmd)"
+		echo "\t\t--apacheuser ($apacheuser)"
+		echo "\t\t--curloptions ($curloptions)"
+		echo "\t\t--ltfsaserverurl ($ltfsaserverurl)"
+		echo "\t\t--ltfsa_gui_user ($ltfsa_gui_user)"
+		echo 
+		exit 0
+        else if ( "$argv[$i]" == "--apachehtmldir" ) then
+                @ i++
+                set apachehtmldir = "$argv[$i]"
+        else if ( "$argv[$i]" == "--apachecgibindir" ) then
+                @ i++
+                set apachecgibindir = "$argv[$i]"
+        else if ( "$argv[$i]" == "--apacheconfigdir" ) then
+                @ i++
+                set apacheconfigdir = "$argv[$i]"
+        else if ( "$argv[$i]" == "--apachehtpasswdcmd" ) then
+                @ i++
+                set apachehtpasswdcmd = "$argv[$i]"
+        else if ( "$argv[$i]" == "--apacheuser" ) then
+                @ i++
+                set apacheuser = "$argv[$i]"
+        else if ( "$argv[$i]" == "--ltfsa_gui_user" ) then
+                @ i++
+                set ltfsa_gui_user = "$argv[$i]"
+        else if ( "$argv[$i]" == "--curloptions" ) then
+                @ i++
+                set curloptions = "$argv[$i]"
+        else if ( "$argv[$i]" == "--ltfsaserverurl" ) then
+                @ i++
+                set ltfsaserverurl = "$argv[$i]"
+        else
+		echo "$this syntax error"
+		echo "$0 -h for help on usage"
+		exit 1
+        endif
+	@ i++
+end
+# Sanity check
+if (!(-e $apachehtmldir ) ) then
+	echo "\n${this}: apachehtmldir error: $apachehtmldir not found"
+	exit 2
+else if (!(-e $apachecgibindir ) ) then
+	echo "\n${this}: apachecgibindir error: $apachecgibindir not found"
+	exit 2
+else if (!(-e $apacheconfigdir ) ) then
+	echo "\n${this}: apacheconfigdir error: $apacheconfigdir not found"
+	exit 2
+endif
+set isuser = `grep -c $apacheuser /etc/passwd`
+if ( !($isuser) ) then
+	echo "\n${this}: apacheuser $apacheuser not found"
+	exit 2
+endif
+which $apachehtpasswdcmd > /dev/null
+if ( $? ) then
+	echo "\n${this}: apachehtpasswdcmd $apachehtpasswdcmd not found"
+	exit 
+endif
+set isuser = `grep -c $ltfsa_gui_user /etc/passwd`
+if ( !($isuser) ) then
+	echo "\n${this}: ltfsa_gui_user $ltfsa_gui_user not found"
+	exit 2
+endif
+#Writing config
+echo $curloptions > config/curloptions
+echo $ltfsaserverurl > config/ltfsaserverurl
+#
+## create or update ltfsa_gui-http.conf
+echo "<Directory $apachecgibindir/ltfsa_gui>" > ltfsa_gui-http.conf
+echo "SetEnv pdir $ltfsa_gui_dir" >> ltfsa_gui-http.conf
+echo 'SetEnv useroptions "theme=default|south|north|western|eastern;"' >> ltfsa_gui-http.conf
+echo "</Directory>" >> ltfsa_gui-http.conf
+echo "<Directory $apachecgibindir/ltfsa_gui/default>" >> ltfsa_gui-http.conf
+echo "AuthType Basic" >> ltfsa_gui-http.conf
+echo 'AuthName "By Invitation Only"' >> ltfsa_gui-http.conf
+echo "AuthUserFile $ltfsa_gui_dir/ltfsa_gui-htpasswords" >> ltfsa_gui-http.conf
+echo "Require user default" >> ltfsa_gui-http.conf
+echo "SetEnv puser default" >> ltfsa_gui-http.conf
+echo "</Directory>" >> ltfsa_gui-http.conf
+#
+#Creating makefile for install/uninstall
+#
+if ( -ersf makefile ) then
+	cp makefile makefile.bak
+endif
+cat license.h > makefile
+echo "install:\n\tmkdir -p logs\n\tchmod ugo+w logs" >> makefile
+echo "\tln -s $ltfsa_gui_dir/www/html/ $apachehtmldir/ltfsa_gui" >> makefile
+echo "\tln -s $ltfsa_gui_dir/www/cgi-bin/ $apachecgibindir/ltfsa_gui" >> makefile
+echo "\tln -s $ltfsa_gui_dir/ltfsa_gui-http.conf $apacheconfigdir/ltfsa_gui-http.conf" >> makefile
+echo "\tchown -h -R $ltfsa_gui_user $apachecgibindir/ltfsa_gui" >> makefile
+echo "\tchown $ltfsa_gui_user.$apacheuser $ltfsa_gui_dir/logs" >> makefile
+echo "\tchmod g+w $ltfsa_gui_dir/logs" >> makefile
+echo "\tchown -R $ltfsa_gui_user.$apacheuser $ltfsa_gui_dir/www/html" >> makefile
+echo "\tchmod -R g+w $ltfsa_gui_dir/www/html" >> makefile
+echo "\techo insert the password for user default" >> makefile
+echo "\t$apachehtpasswdcmd -c ltfsa_gui-htpasswords default" >> makefile
+echo "\tservice apache2 reload\n\n" >> makefile
+
+echo "uninstall:" >> makefile
+echo "\trm -f $apachehtmldir/ltfsa_gui"  >> makefile
+echo "\trm -rf $apachecgibindir/ltfsa_gui"  >> makefile
+echo "\trm -f $apacheconfigdir/ltfsa_gui*http.conf"  >> makefile
+echo "\tservice apache2 reload\n\n" >> makefile
+
+#
+#End of the story
+#
+echo "${this}: ltfsa_gui configured. You can run 'make install' for starting using it (must be superuser)\nFor uninstalling just run 'make uninstall' and remove $ltfsa_gui_dir for complete removal.\nYou can change the configuration any time you need.\n\nHow to start using ltfsa_gui: pen your browser and go to http://localhost/ltfsa_gui, replacing 'localhost' with the name or ip-address of this server for accessing from other systems\n\nHave fun!\n" 
+echo "${this}: end of the story"
+exit 0

@@ -1,14 +1,20 @@
-<html><head><base target="ltfsa_gui_main"/></head><body>
+<html>
+	<head>
+		<base target="ltfsa_gui_main"/>
+		<link href="/ltfsa_gui/css/1.css" type="text/css" rel="stylesheet"/>
+	</head>
+<body>
 <center>
-<div style="clear:both">
-	<form action="/cgi-bin/ltfsa_gui/ltfsa_gui_manualoperator" style="margin:0px">
-		<input type="submit" value="Manual Operator"/>
+<div style="width:300px;height:100px" class="divbluelarge">
+	<form action="/cgi-bin/ltfsa_gui/ltfsarequest"  style="margin-top:25px">
+		<input type="submit" value="Manual Operator" class="formbutton" style="font-size:18px;margin-right:50px;"/>
+		<input type="hidden" name="service" value="ManualLoadQuery"/>
 	</form>
 </div>
-<div style="clear:both">
+<div style="width:300px;height:100px;position:relative;top:100px;" class="divbluelarge">
 	<!-- might be html instead of cgi-bin here -->
-	<form action="ltfsa_gui_APIs.html" style="margin:0px">
-		<input type="submit" value="APIs Services"/>
+	<form action="ltfsa_gui_APIs.html" style="margin-top:25px;">
+		<input type="submit" value="APIs Services" class="formbutton" style="font-size:18px;margin-right:50px;"/>
 	</form>
 	<!-- might be cgi-bin instead of html here 
 	<form action="/cgi-bin/ltfsa_gui/ltfsa_gui_APIs" style="margin:0px">

@@ -1,16 +1,11 @@
-<html>
-	<head>
-		<base target="ltfsa_gui_results"/>
-		<link href="/ltfsa_gui/css/1.css" type="text/css" rel="stylesheet"/>
-	</head>
-<body>
-<div style="clear:both" class="divbluesmall">
+<html><head><base target="ltfsa_gui_results"/></head><body>
+<div style="clear:both">
 	<form action="/cgi-bin/ltfsa_gui/ltfsarequest" method="get" target="ltfsa_gui_results">
-		<input type="submit" value="AddTape" class="formbutton"/>
+		<input type="submit" value="AddTape"/>
 		<input type="hidden" name="service" value="AddTape"/>
-		<br/><br/>Tape
+		<br/>Tape
 		<input type="text" name="TapeID" size="5" value="null"/>
-		Pool 
+		<br/>Pool 
 		<input type="text" name="PoolName" size="5" value="null"/>
 		<br/>Format: No<input type="radio" name="Format" value="N" checked="yes"/>
 		Yes<input type="radio" name="Format" value="Y"/>
@@ -18,24 +13,24 @@
 	</form>
 </div>
 <hr/>
-<div style="clear:both" class="divbluesmall">
+<div style="clear:both">
 	<form action="/cgi-bin/ltfsa_gui/ltfsarequest" style="margin:0px">
-		<input type="submit" value="QueryTapes" class="formbutton"/>
+		<input type="submit" value="QueryTapes"/>
 		<input type="hidden" name="service" value="QueryTapes"/>
-		<br/><br/>Tape
+		<br/>Tape
 		<input type="text" name="TapeID" size="5" value="null"/>
-		Pool 
+		<br/>Pool 
 		<input type="text" name="PoolName" size="5" value="null"/>
 	</form>
 </div>
 <hr/>
-<div style="clear:both" class="divbluesmall">
+<div style="clear:both">
 	<form action="/cgi-bin/ltfsa_gui/ltfsarequest" style="margin:0px">
-		<input type="submit" value="QueryDevices" class="formbutton"/>
+		<input type="submit" value="QueryDevices"/>
 		<input type="hidden" name="service" value="QueryDevices"/>
-		<br/><br/>Device
+		<br/>Device
 		<input type="text" name="Device" size="4" value="null"/>
-		Status 
+		<br/>Status 
 		<select name="Status">
 			<option value="null">any</option>
 			<option>free</option>
@@ -45,24 +40,24 @@
 	</form>
 </div>
 <hr/>
-<div style="clear:both" class="divbluesmall">
+<div style="clear:both">
 	<form action="/cgi-bin/ltfsa_gui/ltfsarequest" style="margin:0px">
-		<input type="submit" value="QueryTasks" class="formbutton"/>
+		<input type="submit" value="QueryTasks"/>
 		<input type="hidden" name="service" value="QueryTasks"/>
-		<br/><br/>Tape
+		<br/>Tape
 		<input type="text" name="TapeID" size="5" value="null"/>
-		Pool 
+		<br/>Pool 
 		<input type="text" name="PoolName" size="5" value="null"/>
-		<br/><br/>File
+		<br/>File
 		<input type="text" name="FileName" size="5" value="null"/>
-		date
+		<br/>date
 		<input type="date" name="Date" size="5" value="null"/>
-		<br/><br/>from
+		<br/>from
 		<input type="date" name="FromDate" size="5" value="null"/>
-		to
+		<br/>to
 		<input type="date" name="ToDate" size="5" value="null"/>
-		<br/><br/>Status 
-		<select name="Status" style="float:right">
+		<br/>Status 
+		<select name="Status">
 			<option value="null">any</option>
 			<option>completed</option>
 			<option>running</option>
@@ -70,7 +65,7 @@
 			<option>fallout</option>
 		</select>
 		<br/>Action
-		<select name="LTFSAction" style="float:right">
+		<select name="LTFSAction">
 			<option value="null">any</option>
 			<option>AddTape</option>
 			<option>Checksum</option>
@@ -83,23 +78,23 @@
 	</form>
 </div>
 <hr/>
-<div style="clear:both" class="divbluesmall">
+<div style="clear:both">
 	<form action="/cgi-bin/ltfsa_gui/ltfsarequest" style="margin:0px">
-		<input type="submit" value="GetStatus" class="formbutton"/>
+		<input type="submit" value="GetStatus"/>
 		<input type="hidden" name="service" value="GetStatus"/>
-		<br/><br/>TaskID
-		<input type="text" name="TaskID" size="20" value="null"/>
+		<br/>TaskID
+		<input type="text" name="TaskID" size="5" value="null"/>
 	</form>
 </div>
 <hr/>
-<div style="clear:both" class="divbluesmall">
+<div style="clear:both">
 	<form action="/cgi-bin/ltfsa_gui/ltfsarequest" style="margin:0px">
-		<input type="submit" value="WriteToLTO" class="formbutton"/>
+		<input type="submit" value="WriteToLTO"/>
 		<input type="hidden" name="service" value="WriteToLTO"/>
-		<br/><br/>Pool 
+		<br/>Pool 
 		<input type="text" name="PoolName" size="5" value="null"/>
 		<br/>File
-		<input type="text" name="FileName" size="25" value="null"/>
+		<input type="text" name="FileName" size="5" value="null"/>
 		<br/>Checksum
 		<select name="Checksum">
 			<option value="null">default</option>
@@ -111,20 +106,20 @@
 			<option>FILE</option>
 		</select>
 		<br/>ChecksumFile
-		<input type="text" name="ChecksumFile" size="15" value="null"/>
+		<input type="text" name="ChecksumFile" size="5" value="null"/>
 	</form>
 </div>
 <hr/>
-<div style="clear:both" class="divbluesmall">
-	<form action="/cgi-bin/ltfsa_gui/ltfsarequest">
-		<input type="submit" value="Restore" class="formbutton"/>
+<div style="clear:both">
+	<form action="/cgi-bin/ltfsa_gui/ltfsarequest" style="margin:0px">
+		<input type="submit" value="Restore"/>
 		<input type="hidden" name="service" value="RestoreFromLTO"/>
-		<br/><br/>File
-		<input type="text" name="FileName" size="15" value="null"/>
-		<br/>DestPath
-		<input type="text" name="DestPath" size="15" value="null"/>
+		<br/>File
+		<input type="text" name="FileName" size="5" value="null"/>
+		<br/>DestPath 
+		<input type="text" name="DestPath" size="5" value="null"/>
 		<br/>Checksum
-		<select name="Checksum" style="float:right">
+		<select name="Checksum">
 			<option value="null">default</option>
 			<option value="N">none</option>
 			<option>MD5</option>
@@ -134,18 +129,18 @@
 			<option>FILE</option>
 		</select>
 		<br/>ChecksumFile
-		<input type="text" name="ChecksumFile" size="15" value="null"/>
+		<input type="text" name="ChecksumFile" size="5" value="null"/>
 	</form>
 </div>
 <hr/>
-<div style="clear:both" class="divbluesmall">
+<div style="clear:both">
 	<form action="/cgi-bin/ltfsa_gui/ltfsarequest" style="margin:0px">
-		<input type="submit" value="Checksum" class="formbutton"/>
+		<input type="submit" value="Checksum"/>
 		<input type="hidden" name="service" value="Checksum"/>
-		<br/><br/>File
-		<input type="text" name="FileName" size="15" value="null"/>
+		<br/>File
+		<input type="text" name="FileName" size="5" value="null"/>
 		<br/>Checksum
-		<select name="Checksum" style="float:right">
+		<select name="Checksum">
 			<option value="null">default</option>
 			<option>MD5</option>
 			<option>MD5_both</option>
@@ -154,7 +149,7 @@
 			<option>FILE</option>
 		</select>
 		<br/>ChecksumFile
-		<input type="text" name="ChecksumFile" size="15" value="null" />
+		<input type="text" name="ChecksumFile" size="5" value="null"/>
 	</form>
 </div>
 <hr/>
