@@ -100,20 +100,19 @@ h3 {
 }
 
 h4 {
-	clear: both;
 	color: #660000;
+	margin-top: 10px;
+	margin-bottom: 4px;
 }
 
 h5 {
-	clear: both;
-	color: #66ff00;
+	color: #aaff00;
+	margin-top: 10px;
+	margin-bottom: 4px;
 }
 
 p {
-	clear: both;
-	float: left;
 	margin: 0 auto;
-	color: auto;
 	text-align: left;
 }
 
