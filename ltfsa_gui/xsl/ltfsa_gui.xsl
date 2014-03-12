@@ -172,6 +172,7 @@
 <!-- ***************************************** -->
 <xsl:template match="Drive">
 	<div style="clear:both" class="divbluesmall">
+	<xsl:if test="not(@tapeID)">
 	<form action="/cgi-bin/ltfsa_gui/ltfsarequest" method="get" target="ltfsa_gui_results">
 		<xsl:element name="input">
 			<xsl:attribute name="name">Device</xsl:attribute>
@@ -189,7 +190,9 @@
 			</xsl:otherwise>
 		</xsl:choose>
 	</form>
+	</xsl:if>
 	<h4>Drive: <xsl:value-of select="@device"/></h4>
+	<xsl:if test="@tapeID">In use with tape: <xsl:value-of select="@tapeID"/></xsl:if>
 	</div>
 </xsl:template>
 <!-- ***************************************** -->

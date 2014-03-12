@@ -181,6 +181,8 @@ endif
 #Writing config
 echo $curloptions > config/curloptions
 echo $ltfsaserverurl > config/ltfsaserverurl
+set ltfsaserverurlsed = `dirname $ltfsaserverurl | sed -e s/'\/'/'\\\/'/g`
+cat share/ltfsa_gui_side.html | sed -e s/'+++LTFSASERVERURL+++'/$ltfsaserverurlsed/g > www/html/ltfsa_gui_side.html
 #
 ## create or update ltfsa_gui-http.conf
 echo "<Directory $apachecgibindir/ltfsa_gui>" > ltfsa_gui-http.conf
@@ -210,6 +212,8 @@ echo "\tchown $ltfsa_gui_user.$apacheuser $ltfsa_gui_dir/logs" >> makefile
 echo "\tchmod g+w $ltfsa_gui_dir/logs" >> makefile
 echo "\tchown -R $ltfsa_gui_user.$apacheuser $ltfsa_gui_dir/www/html" >> makefile
 echo "\tchmod -R g+w $ltfsa_gui_dir/www/html" >> makefile
+echo "\tchown -R $ltfsa_gui_user.$apacheuser $ltfsa_gui_dir/config/ltfsaserverurl" >> makefile
+echo "\tchmod -R g+w $ltfsa_gui_dir/config/ltfsaserverurl" >> makefile
 echo "\techo insert the password for user default" >> makefile
 echo "\t$apachehtpasswdcmd -c ltfsa_gui-htpasswords default" >> makefile
 echo "\tservice apache2 reload\n\n" >> makefile

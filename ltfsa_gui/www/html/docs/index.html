@@ -1,0 +1,103 @@
+
+<html>
+	<head>
+		<link href="/ltfsa_gui/css/1.css" type="text/css" rel="stylesheet"/>
+	</head>
+<body>
+<div style="clear:both" class="divbluelarge">
+	<h1>ltfsa_gui</h1>
+<blockquote>
+	<h3 style="float:right;margin-right:30px;font-size:12px">Version: 0.0.1<br/>Author: L. Boch</h3>
+	<h2 style="clear:both">Documentation</h2>
+	<ul>
+		<li><a href="#intro">Introduction</a>
+		<li><a href="#userguide">User guide</a>
+		<ul>
+			<li><a href="#manopif">Manual Operator Interface</a>
+			<li><a href="#apisif">APIs Interface</a>
+		</ul>
+		<li><a href="#adminguide">Administration guide</a>
+		<ul>
+			<li><a href="#vanilla">How to configure, install, and uninstall</a>
+			<li><a href="#changeconfig">Changing configuration</a>
+			<li><a href="#maintenance">Maintenance and troubleshooting</a>
+		</ul>
+	</ul>
+	<a name="intro"><h3 style="clear:both">Introduction</h3></a>
+<p>
+<b>ltfsa_gui IS-PART-OF LTFSArchiver package</b> and provides a graphical user interface for the <b>ltfsarchiver</b> component of the package, which is the back-end server part.
+</p>
+<p>
+Two main functionalities are provided: one for human operator of possible manually operated drives, with cassettes on shelves; one for an interactive use of the LTFSArchiver server APIs.
+</p>
+<p>
+An alternative for both cases is the command line interface provided by <b>ltfsa_cli</b>, while for the latter it is possible to integrate the APIs into a wider, and possibly automated, archive management framework.
+</p>
+	<a name="userguide"><h3 style="clear:both">User guide</h3></a>
+	<a name="manopif"><h4 style="clear:both">Manual Operator Interface</h4></a>
+<p>
+Using this interface the human operator can monitor the requested manual load operation for tapes not in the library. It is necessary to have at least one external drive.
+The request page is reloaded automatically.
+</p>
+<p>
+In case of request the operator has to look for the LTO tape and insert for loading into the given LTO drive. Then she has to wait for the load to be complete (typically the green led on without flashing) and eventually confirm the successfull load on the interface. 
+</p>
+<p>
+Two failure situation can be handled: "Tape Not Found" and "Device Error".
+</p>
+	<a name="apisif"><h4 style="clear:both">APIs Interface</h4></a>
+<p>
+A human user can interactively use the LTFSArchiver server APIs through this interface. All the APIs are implemented.
+However in some cases they are offered to the user with criteria depending on the context; for example operations on tapes are possible from the results of a query on tapes and similarly with tasks and devices.
+</p>
+<p>
+With the <b>ltfsa_gui</b> it is not possible to directly get XML or JSON output, as it is intended for HTML output. If you need XML or JSON output you will have to use the <b>ltfsa_cli</b>.
+</p>
+	<a name="adminguide"><h3 style="clear:both">Administration guide</h3></a>
+	<a name="vanilla"><h4 style="clear:both">How to configure, install, and uninstall</h4></a>
+<p>You can install <b>ltfsa_gui</b> on the same server running <b>ltfsarchiver</b> or on another server, as you wish. Remember the all the file system paths given in input to <b>ltfsarchiver</b> are considered local to the server on which <b>ltfsarchiver</b> is running.</p> 
+<p>
+The package is implemented for Linux systems, it requires apache/httpd services, and the configuration process works AS IS on Ubuntu.
+It is possible to install <b>ltfsa_gui</b> on other Linux distributions as well, but you will need to modify the configuration script for the part regading the DEPENDENCY CHECK. 
+</p>
+<p>The detailed dependencies can be found in the configuration script.</p>
+<p>The configuration script must be run before the installation and it will create a <i>makefile</i> for install and uninstall operations.</p>
+<p>Instructions:</p>
+<ul>
+	<li><p>Unpack or copy the software folder to the desired working path (e.g. /opt or /usr/local)</p>
+	<li><p>cd ltfsa_gui</p>
+	<li><p>./configure --help  (you will get information about the configuration options)</p>
+	<li><p>./configure [OPTIONS]</p><p>You will be asked for giving the password for the operator</p>
+	<li><p>sudo make install</p><p>'sudo make uninstall' will make the service unactive but will not remove the sofware</p>
+</ul>
+
+	<a name="changeconfig"><h4 style="clear:both">Changing configuration</h4></a>
+<p>
+Part of the configuration is about the installation and you will not need to modify it when running the service.
+</p>
+<p>
+The two properties that might be changed when using the service are:
+</p>
+<ul>
+	<li><p>the URL of the <b>ltfsarchiver</b> service.</p>
+	<li><p>the options (for curl command) for connecting to the  <b>ltfsarchiver</b> service.</p>
+</ul>
+	<a name="maintenance"><h4 style="clear:both">Maintenance and troubleshooting</h4></a>
+<p>Operations are logged into <i>logs</i> folder and logs are never removed. Ask to your system administrator how to set up an automated purge of older logs, if desired; otherwise yyou will have to remove the logs manually</p>
+<p>In case of problems, identify the reason by checking the following:<p>
+<ul>
+	<li><p>that the <b>ltfsarchiver</b> server is reachable and the service is up and running</p>
+	<li><p>look at the latest log file in the logs folder</p>
+	<li><p>look at the possible related error from the apache/httpd service (e.g. 'tail -f /var/log/apache2/error.log' on Ubuntu)</p>
+</ul>
+	<h3 style="clear:both">
+  Copyright (C) 2013-2014 RAI - Radiotelevisione Italiana &lt;cr_segreteria@rai.it
+	</h3>
+</blockquote>
+</div>
+</body></html>
+
+
+
+
+
