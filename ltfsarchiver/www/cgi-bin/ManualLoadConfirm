@@ -22,12 +22,15 @@
 command=`basename $0`
 PARM=$QUERY_STRING
 RECEIVEDTIME=`date +'%Y-%m-%dT%H:%M:%S'`
-VALIDPARMS="TaskID|FromGUI|Output"
+VALIDPARMS="TapeID|Device|Error|FromGUI|Output"
 output=$( get_parameter Output )
 normalize_output
 get_supplied_parameters
-taskid=$( get_parameter TaskID )
+tapeid=$( get_parameter TapeID )
+deviceid=$( get_parameter Device )
+errorwhy=$( get_parameter Error )
 guicall=$( get_parameter FromGUI )
+test_passed=true
 if [ -z $output ]; then
 	output=`echo $LTFSARCHIVER_OUTPUT | tr '[A-Z]' ' [a-z]'`
 	PARM=$PARM'&Output='$output
@@ -35,25 +38,81 @@ fi
 [ -z $guicall ] && guicall=false
 if ! [ -z "$BADPARMS" ]; then
 	exitcode="400"; message="${BADPARMS}"
-else
-	if [ -z $taskid ]; then
-		exitcode="400"; message="Empty TaskID supplied"
+	test_passed=false
+fi
+if $test_passed; then
+	if [ -z $tapeid ]; then
+		exitcode="400"; message="Empty TapeID supplied"
+		test_passed=false
+	fi
+fi
+if $test_passed; then
+	if [ -z $deviceid ]; then
+		exitcode="400"; message="Empty Device supplied"
+		test_passed=false
+	fi
+fi
+if $test_passed; then
+	if [ -z $errorwhy ]; then
+		forwardtask=true
 	else
-		exists=( `$CMD_DB "SELECT substatus,manager from requests WHERE uuid = '$taskid';" | tr -d ' ' | tr '|' ' ' ` )
-		if [ -z ${exists} ]; then
-			exitcode="404"; message="TaskID not found"
-		else
-			#	operator MUST be "M" and substatus MUST be 20
-			if ( [ ${exists[0]} == 20 ] && [ ${exists[1]} == "M" ] ); then
-				$CMD_DB "update requests set substatus=40, status='starting' where uuid='"$taskid"';" >/dev/null 2>&1
-				if [ $? == 0 ]; then
-					exitcode="200"
-				else
-					exitcode="500"; message="Error occured while forwarding status"
+		case $errorwhy in
+			"TapeNotFound")
+				forwardtask=false
+				errorcode="801"
+				errordesc="Manual tape load was rejected: Tape not found"
+			;;
+			"DeviceError")
+				forwardtask=false
+				errorcode="802"
+				errordesc="Manual tape load was rejected: Device error"
+			;;
+			*)
+				test_passed=false
+				exitcode="400"; message="Invalid Error value: only TapeNotFound and DeviceError are accepted"
+			;;
+		
+		esac
+	fi
+fi
+#	All test OK? let's try if somothing's waiting
+if $test_passed; then
+wt=( `$CMD_DB "select uuid, operation from requests where substatus=20 and manager='M' and ltotape='"$tapeid"' and device='"$deviceid"';" | tr -d ' ' | tr '\n' ' ' | tr '|' ' '` )
+	# it shouldn't happen, but...
+	if [ -z ${wt} ]; then
+		exitcode="404"; message="No pending mount request found with this criteria"
+	else
+		GLOBALRC=0
+		for ((ti=0;ti<${#wt[@]};ti+=2)); do
+			#	Forward or fallout?
+			if $forwardtask; then
+				#	forward
+				$CMD_DB "update requests set substatus=40, status='starting' where uuid='"${wt[$ti]}"';" >/dev/null 2>&1
+				let GLOBALRC+=$?
+			else	#	fallout
+				$CMD_DB "update requests set status='fallout',substatus=99, errordescription='${errordesc}', errorcode=$errorcode where uuid='${wt[$ti]}';" >/dev/null 2>&1
+				let GLOBALRC+=$?
+				#	If they were archive, get booked space from requests and decrease value into lto table
+				if [ ${wt[$ti+1]} == "W" ]; then
+					UNBOOK=`$CMD_DB "select sourcesize from requests where uuid='"${wt[$ti]}"';" | tr -d ' '`
+					$CMD_DB "update lto_info set booked=booked-${UNBOOK} where label='"$tapeid"';" >/dev/null 2>&1
+					let GLOBALRC+=$?
 				fi
-			else
-				exitcode="404"; message=$message"TaskID $taskid is not waiting a ManualLoadConfirm"
 			fi
+		done
+		#	IF FALLOUT, FREE RESOURCES
+		if ! $forwardtask; then
+			#	free tape
+			$CMD_DB "update lto_info set inuse=NULL where label='${tapeid}'" > /dev/null 2>&1
+			let GLOBALRC+=$?
+			#	free device
+			$CMD_DB" delete from lock_table where device='"${deviceid}"';" >/dev/null 2>&1
+			let GLOBALRC+=$?
+		fi
+		if [ $GLOBALRC == 0 ]; then
+			exitcode="200"
+		else
+			exitcode="500"; message="Some error occured while updating db"
 		fi
 	fi
 fi

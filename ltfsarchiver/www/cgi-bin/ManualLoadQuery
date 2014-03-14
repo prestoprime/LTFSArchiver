@@ -41,7 +41,7 @@ else
 	TASKS=( `$CMD_DB" select uuid,ltotape,device from requests where substatus=20 and manager='M';" | tr -d ' ' | tr '|' ' ' | tr '\n' ' '` )
 	XMLOUTPUT="\t"'<Output>'"\n"
 	for ((ti=0;ti<${#TASKS[@]};ti+=3)); do
-		XMLOUTPUT=$XMLOUTPUT"\t\t"'<ManualLoad device="'${TASKS[$j+2]}'" taskID="'${TASKS[$j]}'" tapeID="'${TASKS[$j+1]}'"/>'"\n"
+		XMLOUTPUT=$XMLOUTPUT"\t\t"'<ManualLoad device="'${TASKS[$ti+2]}'" taskID="'${TASKS[$ti]}'" tapeID="'${TASKS[$ti+1]}'"/>'"\n"
 	done
 	XMLOUTPUT=$XMLOUTPUT"\t"'</Output>'"\n"
 	exitcode="200"

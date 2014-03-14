@@ -192,7 +192,7 @@ for ((PARMIDX=1;PARMIDX<${PARMSN};PARMIDX++)); do
 	update_uuid_status $WORKING_UUID 50
 	
 	#	check if directory exists
-	if [ -d $BASEPATH ]; then
+	if [ -d $TAPEDIR ]; then
 		#	Open output XMu
 		runchecksum
 		# MATCHORSAVE = NONE means that it was not possible tu run checksum... uses FALLOUTCODE to fallout an exit

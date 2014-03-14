@@ -70,7 +70,7 @@
 			<option>fallout</option>
 		</select>
 		<br/>Action
-		<select name="LTFSAction" style="float:right">
+		<select name="LTFSAction" style="clear:both;float:right">
 			<option value="null">any</option>
 			<option>AddTape</option>
 			<option>Checksum</option>
@@ -80,7 +80,7 @@
 			<option>RestoreFromLTO</option>
 			<option>WriteToLTO</option>
 		</select>
-	</form>
+	</form><br/>
 </div>
 <hr/>
 <div style="clear:both" class="divbluesmall">
@@ -99,9 +99,9 @@
 		<br/><br/>Pool 
 		<input type="text" name="PoolName" size="5" value="null"/>
 		<br/>File
-		<input type="text" name="FileName" size="25" value="null"/>
-		<br/>Checksum
-		<select name="Checksum">
+		<input type="text" name="FileName" size="20" value="null" style="clear:both;float:right"/>
+		<br/><br/>Checksum
+		<select name="Checksum" style="float:right">
 			<option value="null">default</option>
 			<option value="N">none</option>
 			<option>MD5</option>
@@ -111,8 +111,8 @@
 			<option>FILE</option>
 		</select>
 		<br/>ChecksumFile
-		<input type="text" name="ChecksumFile" size="15" value="null"/>
-	</form>
+		<input type="text" name="ChecksumFile" size="20" value="null" style="clear:both;float:right"/>
+	</form><br/>
 </div>
 <hr/>
 <div style="clear:both" class="divbluesmall">
@@ -120,10 +120,10 @@
 		<input type="submit" value="Restore" class="formbutton"/>
 		<input type="hidden" name="service" value="RestoreFromLTO"/>
 		<br/><br/>File
-		<input type="text" name="FileName" size="15" value="null"/>
+		<input type="text" name="FileName" size="20" value="null" style="clear:both;float:right"/>
 		<br/>DestPath
-		<input type="text" name="DestPath" size="15" value="null"/>
-		<br/>Checksum
+		<input type="text" name="DestPath" size="20" value="null" style="clear:both;float:right"/>
+		<br/><br/>Checksum
 		<select name="Checksum" style="float:right">
 			<option value="null">default</option>
 			<option value="N">none</option>
@@ -134,8 +134,8 @@
 			<option>FILE</option>
 		</select>
 		<br/>ChecksumFile
-		<input type="text" name="ChecksumFile" size="15" value="null"/>
-	</form>
+		<input type="text" name="ChecksumFile" size="20" value="null" style="clear:both;float:right"/>
+	</form><br/>
 </div>
 <hr/>
 <div style="clear:both" class="divbluesmall">
@@ -143,8 +143,8 @@
 		<input type="submit" value="Checksum" class="formbutton"/>
 		<input type="hidden" name="service" value="Checksum"/>
 		<br/><br/>File
-		<input type="text" name="FileName" size="15" value="null"/>
-		<br/>Checksum
+		<input type="text" name="FileName" size="20" value="null" style="clear:both;float:right"/>
+		<br/><br/>Checksum
 		<select name="Checksum" style="float:right">
 			<option value="null">default</option>
 			<option>MD5</option>
@@ -154,8 +154,8 @@
 			<option>FILE</option>
 		</select>
 		<br/>ChecksumFile
-		<input type="text" name="ChecksumFile" size="15" value="null" />
-	</form>
+		<input type="text" name="ChecksumFile" size="20" value="null" style="clear:both;float:right"/>
+	</form><br/>
 </div>
 <hr/>
 <div style="clear:both">

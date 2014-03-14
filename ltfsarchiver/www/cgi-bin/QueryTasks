@@ -220,24 +220,26 @@ nowepoc=`date +%s`
 	fi
 fi
 
+#####################################################################################
+#	Controlli su poolname e tapeid rimossi: in caso non esistano avro' output vuoto e non errore
 #		PoolName
-if $test_passed; then
-	if ! [ -z $poolname ]; then
-		if [ $( poolexists $poolname ) == 0 ]; then
-			exitcode=400; message="Pool $poolname does not exist"
-			test_passed=false
-		fi 
-	fi
-fi
+#if $test_passed; then
+#	if ! [ -z $poolname ]; then
+#		if [ $( poolexists $poolname ) == 0 ]; then
+#			exitcode=400; message="Pool $poolname does not exist"
+#			test_passed=false
+#		fi 
+#	fi
+#fi
 #		TapeID
-if $test_passed; then
-	if ! [ -z $tapeid ]; then
-		if [ $( tapeexists $tapeid ) == 0 ]; then
-			exitcode=400; message="Tape $tapeid does not exist"
-			test_passed=false
-		fi 
-	fi
-fi
+#if $test_passed; then
+#	if ! [ -z $tapeid ]; then
+#		if [ $( tapeexists $tapeid ) == 0 ]; then
+#			exitcode=400; message="Tape $tapeid does not exist"
+#			test_passed=false
+#		fi 
+#	fi
+#fi
 #####################################################################################
 if $test_passed; then
 	BASEQUERY="select uuid from requests"
@@ -274,7 +276,7 @@ if $test_passed; then
 	managedates
 	#	MONTO LA QUERY
 	for COND in TAPEQUERY POOLQUERY TASKQUERY STATQUERY FILEQUERY TIMEQUERY; do
-		if ! [ -z ${!COND} ]; then
+		if ! [ -z "${!COND}" ]; then
 			BASEQUERY=${BASEQUERY}${JOINER}${!COND}
 			JOINER=" and"
 		fi
@@ -283,7 +285,11 @@ if $test_passed; then
 	#	Array "a passo 4" con UUID, status, substatus, e operazione
 	TASKARRAY=( `$CMD_DB "${BASEQUERY}" | tr -d ' ' | tr '|' ' ' | tr '\n' ' '` )
 	if [ ${#TASKARRAY[@]} == 0 ]; then
-		exitcode="404"; message="No task found matching search criteria"
+		#	Vecchio: Se non ho task nell'array, esco con 404
+		#exitcode="404"; message="No task found matching search criteria"
+		#	Nuovo: Se non ho task nell'array, esco comunque con success e non con not found
+		exitcode="200"; message="No task found matching search criteria"
+		unset XMLOUTPUT
 	else
 		GLOBXMLOUTPUT="\t"'<Output>'"\n"
 		for ((ti=0;ti<${#TASKARRAY[@]};ti++)); do

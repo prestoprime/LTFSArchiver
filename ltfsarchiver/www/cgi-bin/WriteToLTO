@@ -64,7 +64,6 @@ ask4checksum=$( get_parameter Checksum )	#	Tipo di checksum richiesto
 filesrc=$( get_parameter FileName )		#	Nome del file o del folder da archiviare
 checksumfile=$( get_parameter ChecksumFile )	#	File con checksum precalcolati
 guicall=$( get_parameter FromGUI )		#	true (da parametro nascosto) se arriva da pagina web
-insert_substatus=0
 test_passed=true
 if [ -z $output ]; then
 	output=`echo $LTFSARCHIVER_OUTPUT | tr '[A-Z]' ' [a-z]'`
@@ -84,7 +83,6 @@ if ! [ -z "$BADPARMS" ]; then
         exitcode="400"; message="${BADPARMS}"
 	test_passed=false
 fi
-#	il substatus iniziale e' 0 di default, diventera' -10 se viene chiesto il checksum file-based
 #==================================================================================
 [ -z $guicall ] && guicall=false
 if $test_passed; then

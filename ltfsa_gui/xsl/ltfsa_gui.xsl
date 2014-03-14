@@ -340,15 +340,24 @@
 	<div style="clear:both" class="divbluesmall">
 	<form action="/cgi-bin/ltfsa_gui/ltfsarequest" method="get" target="ltfsa_gui_main">
 		<xsl:element name="input">
-			<xsl:attribute name="name">TaskID</xsl:attribute>
+			<xsl:attribute name="name">TapeID</xsl:attribute>
 			<xsl:attribute name="type">hidden</xsl:attribute>
-			<xsl:attribute name="value"><xsl:value-of select="@taskID"/></xsl:attribute>
+			<xsl:attribute name="value"><xsl:value-of select="@tapeID"/></xsl:attribute>
 		</xsl:element>
-		<input type="submit" value="Enter when done" class="formbutton"/>
+		<xsl:element name="input">
+			<xsl:attribute name="name">Device</xsl:attribute>
+			<xsl:attribute name="type">hidden</xsl:attribute>
+			<xsl:attribute name="value"><xsl:value-of select="@device"/></xsl:attribute>
+		</xsl:element>
+		<input type="submit" value="Confirm" class="formbutton"/>
 		<input type="hidden" name="service" value="ManualLoadConfirm"/>
+		<p style="clear:both;float:right">Done Okay<input type="radio" name="Error" value="null" checked="yes"/>
+		Tape Not Found<input type="radio" name="Error" value="TapeNotFound"/>
+		Device Error<input type="radio" name="Error" value="DeviceError"/>
+		</p>
 	</form>
 	<h4>Please load tape: <xsl:value-of select="@tapeID"/> on device: <xsl:value-of select="@device"/></h4>
-	<p><xsl:value-of select="@taskID"/></p>
+	<p><xsl:value-of select="@taskID"/><br/></p>
 	</div>
 </xsl:template>
 <!-- ************************************************************-->

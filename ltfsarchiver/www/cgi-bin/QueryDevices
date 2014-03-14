@@ -26,14 +26,26 @@ function report_device()
 [ "$2" == "less" ] && indent="\t\t"
 DEVDATA=( `$CMD_DB" select * from lock_table where device='"$1"';" | tr -d ' ' | tr '|' ' '` )
 if [ -z ${DEVDATA} ]; then
-	XMLOUTPUT=$XMLOUTPUT$indent'<Drive device="'$1'" use="true"/>'"\n"
+	#XMLOUTPUT=$XMLOUTPUT$indent'<Drive device="'$1'" use="true"/>'"\n"
+	#	Appendo ad output solo se statsu=all o status=free
+	if ( [ -z $devicestatus ] || [ $devicestatus == "free" ] ); then
+		XMLOUTPUT=$XMLOUTPUT$indent'<Drive device="'$1'" use="true"/>'"\n"
+	fi
 else
 	case ${DEVDATA[1]} in
 		"$LTFSARCHIVER_LOCK_LABEL")
-			XMLOUTPUT=$XMLOUTPUT$indent'<Drive device="'$1'" use="false"/>'"\n"
+			#XMLOUTPUT=$XMLOUTPUT$indent'<Drive device="'$1'" use="false"/>'"\n"
+			#	Appendo ad output solo se statsu=all o status=locked
+			if ( [ -z $devicestatus ] || [ $devicestatus == "locked" ] ); then
+				XMLOUTPUT=$XMLOUTPUT$indent'<Drive device="'$1'" use="false"/>'"\n"
+			fi
 		;;
 		*)
-			XMLOUTPUT=$XMLOUTPUT$indent'<Drive device="'$1'" use="true" TapeID="'${DEVDATA[1]}'"/>'"\n"
+			#XMLOUTPUT=$XMLOUTPUT$indent'<Drive device="'$1'" use="true" tapeID="'${DEVDATA[1]}'"/>'"\n"
+			#	Appendo ad output solo se statsu=all o status=busy
+			if ( [ -z $devicestatus ] || [ $devicestatus == "busy" ] ); then
+				XMLOUTPUT=$XMLOUTPUT$indent'<Drive device="'$1'" use="true" tapeID="'${DEVDATA[1]}'"/>'"\n"
+			fi
 		;;
 	esac
 			
@@ -45,15 +57,17 @@ fi
 command=`basename $0`
 PARM=$QUERY_STRING
 RECEIVEDTIME=`date +'%Y-%m-%dT%H:%M:%S'`
-VALIDPARMS="Device|PoolName|FromGUI|Output"
+VALIDPARMS="Device|Status|FromGUI|Output"
 output=$( get_parameter Output )
 normalize_output
 get_supplied_parameters
 tapedevice=$( get_parameter Device )
+devicestatus=$( get_parameter Status )
 guicall=$( get_parameter FromGUI )
+test_passed=true
 XMLOUTPUT="\t"'<Output>'"\n"
 exitcode="200"
-#	parto a false... lo porto a true quando trovo il device o se cerco su tutti
+#	Starting with tapefound=true... will switch to true when at least one tape is found
 tapefound=false
 if [ -z $output ]; then
         output=`echo $LTFSARCHIVER_OUTPUT | tr '[A-Z]' ' [a-z]'`
@@ -61,7 +75,22 @@ if [ -z $output ]; then
 fi
 if ! [ -z "$BADPARMS" ]; then
         unset XMLOUTPUT; exitcode="400"; message="${BADPARMS}"
-else
+	test_passed=false
+fi
+if $test_passed; then
+	if ! [ -z ${devicestatus} ]; then
+		case $devicestatus in
+			"busy"|"locked"|"free")
+				#	NOTHING to do... good values
+			;;
+			*)
+	        		unset XMLOUTPUT; exitcode="400"; message="Invalid Status value supplied"
+				test_passed=false
+			;;
+		esac
+	fi
+fi
+if $test_passed; then
 	if [ -z "$tapedevice" ]; then
 		tapefound=true
 		#	Quelli in librerie...
@@ -99,8 +128,9 @@ else
 		done
 	fi
 	if ! $tapefound; then
+		#exitcode="400"; message="Device $tapedevice not found"
+		exitcode="200"; message="Device $tapedevice not found"
 		unset XMLOUTPUT
-		exitcode="400"; message="Device $tapedevice not found"
 	else
 		XMLOUTPUT=$XMLOUTPUT"\t"'</Output>'"\n"
 	fi

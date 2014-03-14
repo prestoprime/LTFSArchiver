@@ -77,7 +77,7 @@ function normalize_output
 {
 output=`echo $output | tr '[A-Z]' '[a-z]'`
 case $output in
-	"xml"|"html"|"json")
+	"xml"|"json")
 	;;
 	*)
 		PARM=`echo $PARM | tr '&' '\n' | sed -e '/^Output=/d' | tr '\n' '&' | sed -e 's/\&$//'`

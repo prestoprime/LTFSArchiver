@@ -50,7 +50,7 @@ while ( $i < $#inquery )
                 set var = "$inquery[$i]"
                 @ i++
                 set value = "$inquery[$i]"
-		if (  "$var" == "TaskID" || "$var" == "TapeID" || "$var" == "PoolName" || "$var" == "FileName" || "$var" == "Checksum" || "$var" == "ChecksumFile" || "$var" == "DestPath" || "$var" == "Date" || "$var" == "FromDate" || "$var" == "ToDate" || "$var" == "Status" || "$var" == "LTFSAction" || "$var" == "Format" || "$var" == "Device" )  then
+		if (  "$var" == "TaskID" || "$var" == "TapeID" || "$var" == "PoolName" || "$var" == "FileName" || "$var" == "Checksum" || "$var" == "ChecksumFile" || "$var" == "DestPath" || "$var" == "Date" || "$var" == "FromDate" || "$var" == "ToDate" || "$var" == "Status" || "$var" == "LTFSAction" || "$var" == "Format" || "$var" == "Device" || "$var" == "Error" )  then
 			if ( "$value" != "null" ) then
 				set ltfsaquery = "$ltfsaquery&$var=$value"
 			endif

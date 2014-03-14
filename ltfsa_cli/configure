@@ -110,11 +110,6 @@ set ltfsa_cli_user = `whoami`
 # generic parsing of input
 set i = 1
 while ( $i <= $#argv )
-#		checksum
-#		curloptions
-#		ltfsaserverurl
-#		output
-#		poolname
         if ( "$argv[$i]" == "-h" || "$argv[$i]" == "--help" ) then
 #		write help
 		echo "$this usage:"
