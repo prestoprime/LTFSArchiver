@@ -1,0 +1,170 @@
+
+/*
+#
+#  ltfsa_gui
+#  Version: 0.0.1
+#  Authors: L. Boch
+#
+#  Copyright (C) 2013-2014 RAI - Radiotelevisione Italiana <cr_segreteria@rai.it>
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU Affero General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU Affero General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+*/
+
+body {
+	background: #953735;
+	margin: 0 auto;
+	color: auto;
+	text-align: left;
+}
+
+div {
+	background:  #953735;
+	border:2px solid;
+	border-color: #4f81bd;
+}
+
+.divblueL {
+	background: #4f81bd;
+	border:0px;
+	float:left;
+	clear:left;
+}
+
+.divblueR {
+	background: #4f81bd;
+	border:0px;
+	float:right;
+	clear:right;
+}
+
+.divbluelarge {
+	margin: 25px 25px 25px 25px;
+	background: #4f81bd;
+	border-radius:18px;
+	border-color: #f0f0f0;
+}
+
+.divbluesmall {
+	margin: 6px 6px 6px 6px;
+	background: #4f81bd;
+	border-radius:8px;
+	border-color: #f0f0f0;
+	color: #f0f0f0;
+	padding: 5px;
+}
+
+.imgplace {
+	float:left;
+	width:30%;
+	border:1px;
+	border-radius:8px;
+	border-color:#f0f0f0;
+	margin: 8px 8px 8px 8px;
+}
+
+.formbutton {
+	float:right;
+	background: #4f81bd;
+	box-shadow: 3px 3px 3px #989898;
+	border:0;
+	font-weight:bold;
+	margin: 8px 8px 8px 8px;
+	color:#f0f0f0;
+}
+
+h1 {
+	float:left;
+	background: #4f81bd;
+	color: #f0f0f0;
+	vertical-align:bottom;
+	margin: 10px 10px 10px 10px;
+}
+
+h2 {
+	color: #f0f0f0;
+}
+
+h3 {
+	color: #f0f0f0;
+}
+
+h4 {
+	color: #660000;
+	margin-top: 10px;
+	margin-bottom: 4px;
+}
+
+h5 {
+	color: #aaff00;
+	margin-top: 10px;
+	margin-bottom: 4px;
+}
+
+p {
+	margin: 0 auto;
+	text-align: left;
+}
+
+form {
+	margin:0px;
+}
+
+.divleft50p {
+	float:left;
+	width:50px;
+}
+
+.divleft20 {
+	float:left;
+}
+
+.divleft24 {
+	float:left;
+	width:24%;
+}
+
+.button {
+	background: #f0f0f0;
+	clear: both;
+	float: left;
+	width: 200px;
+	height: 26px;
+	margin: 0 auto;
+	color: auto;
+	text-align: center;
+	cursor: pointer;
+}
+
+.nascosto {
+	background: #f0f0f0;
+	clear: both;
+	position: left
+	width: auto;
+	height: auto;
+	margin: 0 auto;
+	text-align: center;
+	display: none;
+}
+
+
+.yes {
+	background: #20ff20;
+	height: 28px;
+}
+
+.no {
+	background: #ff2020;
+	height: 28px;
+}
+
