@@ -29,7 +29,7 @@
 #
 # ./configure can be used for preparing the installion or for modifying an existing configuration
 #
-# DEPENDENCIES: tcsh, curl, apache2, xsltproc 
+# DEPENDENCIES: tcsh, curl, apache2|httpd, xsltproc 
 #	cannot solve tcsh as it's required for running the script (apt-get install tcsh)
 # RECOMMENDED: xsltproc, tofrodos (fromdos), gridsite-clients (urlencode), libxml2-utils)
 # recommended are not checked
@@ -40,40 +40,54 @@ set echo_style = both
 set this = `basename $0`
 cd `dirname $0`
 set ltfsa_gui_dir = `pwd`
+set isUbuntu = `cat /etc/*release | grep -c Ubuntu`
+set isDebian = `cat /etc/*release | grep -c Debian`
+set isCentOS = `cat /etc/*release | grep -c CentOS`
+set isRedHat = `cat /etc/*release | grep -c RedHat`
+if ( $isUbuntu || $isDebian  ) then
+	set apacheservice = apache2	
 #
 #	Checking dependencies
 #
-set statusOK = "Status: install ok installed"
-set status = `dpkg -s apache2|grep Status:`
-if ( "$status" != "$statusOK" ) then
-	echo "apache2 not found. Try apt-get install apache2"
+	dpkg -s apache2 >& /dev/null
+	if ( $? ) then
+		echo "apache2 not found. Try apt-get install apache2"
+		exit 1
+	endif
+	dpkg -s xsltproc >& /dev/null
+	if ( $? ) then
+		echo "xsltproc not found. Try apt-get install xsltproc"
+		exit 1
+	endif
+	dpkg -s curl >& /dev/null
+	if ( $? ) then
+		echo "curl not found. Try apt-get install curl"
+		exit 1
+	endif
+else if ( $isUbuntu || $isDebian  ) then
+	set apacheservice = httpd
+#
+#	Checking dependencies
+#
+	rpm -httpd  >& /dev/null
+	if ( $? ) then
+		echo "httpd not found. Try yum install httpd"
+		exit 1
+	endif
+	rpm -q xsltproc >& /dev/null
+	if ( $? ) then
+		echo "xsltproc not found. Try yum install xsltproc"
+		exit 1
+	endif
+	rpm -q -s curl >& /dev/null
+	if ( $? ) then
+		echo "curl not found. Try yum install curl"
+		exit 1
+	endif
+else
+	echo "Unknown system release: try to modify configure by end to fix the problem"
 	exit 1
 endif
-set status = `dpkg -s xsltproc|grep Status:`
-if ( "$status" != "$statusOK" ) then
-	echo "xsltproc not found. Try apt-get install xsltproc"
-	exit 1
-endif
-set status = `dpkg -s curl|grep Status:`
-if ( "$status" != "$statusOK" ) then
-	echo "curl not found. Try apt-get install curl"
-	exit 1
-endif
-#set status = `dpkg -s tofrodos|grep Status:`
-#if ( "$status" != "$statusOK" ) then
-#	echo "tofrodos not found. Try apt-get install tofrodos"
-#	exit 1
-#endif
-#set status = `dpkg -s gridsite-clients|grep Status:`
-#if ( "$status" != "$statusOK" ) then
-#	echo "gridsite-clients not found. Try apt-get install gridsite-clients"
-#	exit 1
-#endif
-#set status = `dpkg -s libxml2-utils|grep Status:`
-#if ( "$status" != "$statusOK" ) then
-#	echo "libxml2-utils not found. Try apt-get install libxml2-utils"
-#	exit 1
-#endif
 echo "Dependencies okayed. Running check of existing configuration"
 if ( -ersf ltfsa_gui-http.conf ) then
 	cp -v ltfsa_gui-http.conf ltfsa_gui-http.conf.bak
@@ -96,7 +110,7 @@ set ltfsa_gui_user = `whoami`
 #
 set apachehtmldir = /var/www/html
 set apachecgibindir = /var/www/cgi-bin
-set apacheconfigdir = /etc/apache2/conf.d
+set apacheconfigdir = /etc/$apacheservice/conf.d
 set apachehtpasswdcmd = htpasswd
 set apacheuser = www-data
 
@@ -211,13 +225,13 @@ echo "\tchown -R $ltfsa_gui_user.$apacheuser $ltfsa_gui_dir/config/ltfsaserverur
 echo "\tchmod -R g+w $ltfsa_gui_dir/config/ltfsaserverurl" >> makefile
 echo "\techo insert the password for user default" >> makefile
 echo "\t$apachehtpasswdcmd -c ltfsa_gui-htpasswords default" >> makefile
-echo "\tservice apache2 reload\n\n" >> makefile
+echo "\tservice $apacheservice reload\n\n" >> makefile
 
 echo "uninstall:" >> makefile
 echo "\trm -f $apachehtmldir/ltfsa_gui"  >> makefile
 echo "\trm -rf $apachecgibindir/ltfsa_gui"  >> makefile
 echo "\trm -f $apacheconfigdir/ltfsa_gui*http.conf"  >> makefile
-echo "\tservice apache2 reload\n\n" >> makefile
+echo "\tservice $apacheservice reload\n\n" >> makefile
 
 #
 #End of the story
