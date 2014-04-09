@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<LTFSArchiver xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xlink="http://www.w3.org/1999/xlink">
+	<ReceivedRequest service="QueryTapes" time="2014-03-20T12:09:51">
+		<Parameter name="Output" value="XML" assignedByDefault="false"/>
+	</ReceivedRequest>
+	<Response timenow="2014-03-20T12:09:56" exit_string="success" exit_code="200"/>
+	<Output>
+		<Pool poolName="Cangialosi_A" numTapes="5" totalSizeMB="6820515" totalFreeMB="4745766"  minimumFreeMB="2844" maximumFreeMB="1364103">
+			<Tape tapeID="DBK000L5" sizeMB="1364103" freeMB="2844" ltotype="LTO5" writeEnable="true" status="idle" lastModified="2014-01-28T12:01:35"/>
+			<Tape tapeID="DBK002L5" sizeMB="1364103" freeMB="650613" ltotype="LTO5" writeEnable="true" status="idle" lastModified="2014-01-28T12:01:35"/>
+			<Tape tapeID="DBK004L5" sizeMB="1364103" freeMB="1364103" ltotype="LTO5" writeEnable="true" status="idle" lastModified="2014-01-28T12:01:35"/>
+			<Tape tapeID="DBK006L5" sizeMB="1364103" freeMB="1364103" ltotype="LTO5" writeEnable="true" status="idle" lastModified="2014-01-28T12:01:35"/>
+			<Tape tapeID="DBK008L5" sizeMB="1364103" freeMB="1364103" ltotype="LTO5" writeEnable="true" status="idle" lastModified="2014-01-28T12:01:35"/>
+		</Pool>
+		<Pool poolName="Cangialosi_B" numTapes="5" totalSizeMB="6820515" totalFreeMB="4745598"  minimumFreeMB="2987" maximumFreeMB="1364103">
+			<Tape tapeID="DBK001L5" sizeMB="1364103" freeMB="2987" ltotype="LTO5" writeEnable="true" status="idle" lastModified="2014-01-28T12:01:35"/>
+			<Tape tapeID="DBK003L5" sizeMB="1364103" freeMB="650302" ltotype="LTO5" writeEnable="true" status="idle" lastModified="2014-01-28T12:01:35"/>
+			<Tape tapeID="DBK005L5" sizeMB="1364103" freeMB="1364103" ltotype="LTO5" writeEnable="true" status="idle" lastModified="2014-01-28T12:01:35"/>
+			<Tape tapeID="DBK007L5" sizeMB="1364103" freeMB="1364103" ltotype="LTO5" writeEnable="true" status="idle" lastModified="2014-01-28T12:01:35"/>
+			<Tape tapeID="DBK009L5" sizeMB="1364103" freeMB="1364103" ltotype="LTO5" writeEnable="true" status="idle" lastModified="2014-01-28T12:01:35"/>
+		</Pool>
+		<Pool poolName="esterno" numTapes="2" totalSizeMB="2728206" totalFreeMB="2296319"  minimumFreeMB="942929" maximumFreeMB="1353390">
+			<Tape tapeID="ADAM37L5" sizeMB="1364103" freeMB="942929" ltotype="LTO5" writeEnable="true" status="idle" lastModified="2014-01-28T12:01:35"/>
+			<Tape tapeID="DBJ961L5" sizeMB="1364103" freeMB="1353390" ltotype="LTO5" writeEnable="true" status="busy for AddTape" lastModified="2014-03-10T17:37:48">
+				<Mount device="/dev/st0" readonly="false"/>
+			</Tape>
+		</Pool>
+		<Pool poolName="LAU_A" numTapes="2" totalSizeMB="2728206" totalFreeMB="2728206"  minimumFreeMB="1364103" maximumFreeMB="1364103">
+			<Tape tapeID="DBJ990L5" sizeMB="1364103" freeMB="1364103" ltotype="LTO5" writeEnable="true" status="idle" lastModified="2014-01-28T12:01:35"/>
+			<Tape tapeID="DBJ992L5" sizeMB="1364103" freeMB="1364103" ltotype="LTO5" writeEnable="true" status="idle" lastModified="2014-01-28T12:01:35"/>
+		</Pool>
+		<Pool poolName="LAU_B" numTapes="2" totalSizeMB="2728206" totalFreeMB="2728206"  minimumFreeMB="1364103" maximumFreeMB="1364103">
+			<Tape tapeID="DBJ991L5" sizeMB="1364103" freeMB="1364103" ltotype="LTO5" writeEnable="true" status="idle" lastModified="2014-01-28T12:01:35"/>
+			<Tape tapeID="DBJ993L5" sizeMB="1364103" freeMB="1364103" ltotype="LTO5" writeEnable="true" status="idle" lastModified="2014-01-28T12:01:35"/>
+		</Pool>
+		<Pool poolName="PoolA" numTapes="3" totalSizeMB="4170814" totalFreeMB="4170814"  minimumFreeMB="1364103" maximumFreeMB="1442608">
+			<Tape tapeID="DBJ956L5" sizeMB="1364103" freeMB="1364103" ltotype="LTO5" writeEnable="true" status="idle" lastModified="2014-01-28T12:01:35"/>
+			<Tape tapeID="DBJ960L5" sizeMB="1364103" freeMB="1364103" ltotype="LTO5" writeEnable="true" status="idle" lastModified="2014-01-28T12:01:35"/>
+			<Tape tapeID="DBJ964L5" sizeMB="1442608" freeMB="1442608" ltotype="LTO5" writeEnable="true" status="idle" lastModified="2014-02-14T09:47:43"/>
+		</Pool>
+		<Pool poolName="PoolB" numTapes="2" totalSizeMB="2728206" totalFreeMB="2655240"  minimumFreeMB="1291137" maximumFreeMB="1364103">
+			<Tape tapeID="DBJ957L5" sizeMB="1364103" freeMB="1291137" ltotype="LTO5" writeEnable="true" status="idle" lastModified="2014-01-28T12:01:35"/>
+			<Tape tapeID="DBJ958L5" sizeMB="1364103" freeMB="1364103" ltotype="LTO5" writeEnable="true" status="idle" lastModified="2014-01-28T12:01:35"/>
+		</Pool>
+	</Output>
+
+</LTFSArchiver>

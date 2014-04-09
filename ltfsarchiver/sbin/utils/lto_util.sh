@@ -36,7 +36,7 @@ while [ $TENTATIVO -le 5 ]; do
 			if [ -z ${TAPESTATUS[0]} ]; then
 				unset TAPE_STATUS_TYPE
 			else
-				while [ $DENSITY_IDX -lt ${#LTO_ALLOWED_CODES[@]} ]; do
+				for ((DENSITY_IDX=0;DENSITY_IDX<${#LTO_ALLOWED_CODES[@]};DENSITY_IDX++)); do
 					if [ ${TAPESTATUS[0]} == ${LTO_ALLOWED_CODES[$DENSITY_IDX]} ]; then
 						TAPE_STATUS_TYPE=${LTO_ALLOWED_TYPES[$DENSITY_IDX]}
 						#	Setting watermark (will be used for write batch(es))

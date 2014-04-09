@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<LTFSArchiver xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xlink="http://www.w3.org/1999/xlink">
+	<ReceivedRequest service="ManualLoadQuery" time="2014-03-20T12:57:16">
+		<Parameter name="Output" value="XML" assignedByDefault="false"/>
+	</ReceivedRequest>
+	<Response timenow="2014-03-20T12:57:16" exit_string="success" exit_code="200"/>
+	<Output>
+	</Output>
+
+</LTFSArchiver>
