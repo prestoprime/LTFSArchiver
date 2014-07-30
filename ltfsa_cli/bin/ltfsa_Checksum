@@ -75,7 +75,7 @@ end
 if ( $help || "$filename" == null  || "$checksum" == N || ( "$output" != "XML" && "$output" != "JSON" ) ) then
 	echo
 	echo "\tUsage:"
-	echo "\t$this [-f|--Output XML|JSON] [-o <outfile>] [-p|--PoolName <PoolName>]"
+	echo "\t$this [-f|--Output XML|JSON] [-o <outfile>]"
 	echo "\t\t [[--MD5|--SHA1|--MD5_both|--SHA1_both]|[--ChecksumFile <ChecksumFile>]]"
 	echo "\t\t -S|--FileName <FileName>"
 	echo "\t\t [-h|--help]"
@@ -87,9 +87,6 @@ endif
 #Calling the service
 #
 set options = "&FileName=$filename&Checksum=$checksum" 
-if ( "$poolname" != null ) then
-	set options = "$options&PoolName=$poolname" 
-endif
 if ( "$checksumfile" != null ) then
 	set options = "$options&checksumfile=$checksumfile" 
 endif

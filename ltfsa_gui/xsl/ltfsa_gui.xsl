@@ -324,6 +324,18 @@
 				</form>
 		</xsl:otherwise>
 	</xsl:choose>
+	<xsl:if test="Mount">
+		<!-- Form for MakeAvaiableUnmount -->
+		<form style="float:right" action="/cgi-bin/ltfsa_gui/ltfsarequest" method="get" target="ltfsa_gui_results">
+			<xsl:element name="input">
+				<xsl:attribute name="name">TapeID</xsl:attribute>
+				<xsl:attribute name="type">hidden</xsl:attribute>
+				<xsl:attribute name="value"><xsl:value-of select="@tapeID"/></xsl:attribute>
+			</xsl:element>
+			<input type="submit" value="Unmount" class="formbutton"/>
+			<input type="hidden" name="service" value="MakeAvailableUnmount"/>
+		</form>
+	</xsl:if>
 	<p style="font-weight:bold">
 	<xsl:value-of select="@freeMB"/>MB free out of  <xsl:value-of select="@sizeMB"/>MB total<br/>
 	</p>	
